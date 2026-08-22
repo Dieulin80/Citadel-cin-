@@ -337,7 +337,7 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
       fd.append("title", form.title);
 
       const res = await fetch(
-        "https://wepevdfxxihcqwmektnt.supabase.co/functions/v1/upload-video",
+        "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/upload-video",
         { method: "POST", body: fd }
       );
       setProgress(80);
