@@ -316,43 +316,54 @@ function LoginGate({ lang, onLoggedIn }) {
 
 function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
   const [form, setForm] = useState({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "" });
-  const [videoName, setVideoName] = useState("");
+  const [videoFile, setVideoFile] = useState(null);
   const [posterFile, setPosterFile] = useState(null);
   const [error, setError] = useState("");
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("idle");
-  const intervalRef = useRef(null);
-  const canSubmit = form.title && form.year && videoName && status === "idle";
+  const canSubmit = form.title && form.year && videoFile && status === "idle";
 
-  function handleFile(e) { const f = e.target.files?.[0]; if (f) setVideoName(f.name); }
+  function handleFile(e) { const f = e.target.files?.[0]; if (f) setVideoFile(f); }
   function handlePoster(e) { const f = e.target.files?.[0]; if (f) setPosterFile(f); }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    if (!videoName) { setError(t.err_file); return; }
-    setError(""); setStatus("uploading"); setProgress(0);
-    intervalRef.current = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) {
-          clearInterval(intervalRef.current);
-          setStatus("done");
-          onSubmitFilm({
-            genreKey: form.genreKey, year: form.year, duration: form.duration || "—",
-            title: { ht: form.title, fr: form.title, en: form.title },
-            desc: { ht: form.desc || "Pa gen deskripsyon.", fr: form.desc || "Pas de description.", en: form.desc || "No description." },
-            submittedName: form.name,
-            posterFile,
-          });
-          return 100;
-        }
-        return p + 100 / 24;
+    if (!videoFile) { setError(t.err_file); return; }
+    setError(""); setStatus("uploading"); setProgress(15);
+
+    try {
+      const fd = new FormData();
+      fd.append("file", videoFile);
+      fd.append("title", form.title);
+
+      const res = await fetch(
+        "https://wepevdfxxihcqwmektnt.supabase.co/functions/v1/upload-video",
+        { method: "POST", body: fd }
+      );
+      setProgress(80);
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Upload echwe");
+
+      setProgress(100);
+      setStatus("done");
+      onSubmitFilm({
+        genreKey: form.genreKey, year: form.year, duration: form.duration || "—",
+        title: { ht: form.title, fr: form.title, en: form.title },
+        desc: { ht: form.desc || "Pa gen deskripsyon.", fr: form.desc || "Pas de description.", en: form.desc || "No description." },
+        submittedName: form.name,
+        posterFile,
+        videoUrl: result.playbackUrl,
       });
-    }, 120);
+    } catch (err) {
+      setStatus("idle");
+      setProgress(0);
+      setError(String(err.message || err));
+    }
   }
 
   function reset() {
     setForm({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "" });
-    setVideoName(""); setPosterFile(null); setStatus("idle"); setProgress(0);
+    setVideoFile(null); setPosterFile(null); setStatus("idle"); setProgress(0);
   }
 
   return (
@@ -425,7 +436,7 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
             <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_video}</label>
             <label className="flex flex-col items-center justify-center gap-2 py-6 rounded-md text-sm cursor-pointer" style={{ border: "1.5px dashed #2A2A38", color: "#8C8A96" }}>
               <UploadCloud size={20} style={{ color: "#C9A15A" }} />
-              {videoName ? videoName : t.f_video_ph}
+              {videoFile ? videoFile.name : t.f_video_ph}
               <input type="file" accept="video/*" className="hidden" onChange={handleFile} />
             </label>
           </div>
@@ -544,7 +555,7 @@ export default function HyperFilms() {
       desc_ht: newFilm.desc.ht, desc_fr: newFilm.desc.fr, desc_en: newFilm.desc.en,
       genre_key: newFilm.genreKey, year: parseInt(newFilm.year, 10) || null, duration: newFilm.duration,
       status, submitted_name: newFilm.submittedName || null, created_by: staffUser?.id || null,
-      poster_url,
+      poster_url, video_url: newFilm.videoUrl || null,
     }).select();
     if (!error && data && data[0]) setFilms((prev) => [dbRowToFilm(data[0]), ...prev]);
   }
