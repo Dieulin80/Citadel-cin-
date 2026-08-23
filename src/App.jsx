@@ -338,5 +338,424 @@ function LoginGate({ lang, onLoggedIn }) {
       </form>
     </div>
   );
-           }
-  
+}
+
+function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
+  const [form, setForm] = useState({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "" });
+  const [videoFile, setVideoFile] = useState(null);
+  const [posterFile, setPosterFile] = useState(null);
+  const [error, setError] = useState("");
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState("idle");
+  const canSubmit = form.title && form.year && videoFile && status === "idle";
+
+  function handleFile(e) { const f = e.target.files?.[0]; if (f) setVideoFile(f); }
+  function handlePoster(e) { const f = e.target.files?.[0]; if (f) setPosterFile(f); }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!videoFile) { setError(t.err_file); return; }
+    setError(""); setStatus("uploading"); setProgress(15);
+
+    try {
+      const fd = new FormData();
+      fd.append("file", videoFile);
+      fd.append("title", form.title);
+
+      const res = await fetch(
+        "https://wepevdfxxihcqwmektnt.supabase.co/functions/v1/upload-video",
+        { method: "POST", body: fd }
+      );
+      setProgress(80);
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Upload echwe");
+
+      setProgress(100);
+      setStatus("done");
+      onSubmitFilm({
+        genreKey: form.genreKey, year: form.year, duration: form.duration || "—",
+        title: { ht: form.title, fr: form.title, en: form.title },
+        desc: { ht: form.desc || "Pa gen deskripsyon.", fr: form.desc || "Pas de description.", en: form.desc || "No description." },
+        submittedName: form.name,
+        posterFile,
+        videoUrl: result.playbackUrl,
+      });
+    } catch (err) {
+      setStatus("idle");
+      setProgress(0);
+      setError(String(err.message || err));
+    }
+  }
+
+  function reset() {
+    setForm({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "" });
+    setVideoFile(null); setPosterFile(null); setStatus("idle"); setProgress(0);
+  }
+
+  return (
+    <div className="max-w-xl mx-auto px-4 py-10">
+      <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.7rem", letterSpacing: "0.02em" }}>
+        {isStaff ? t.up_title : t.com_title}
+      </h2>
+      <p className="text-sm mt-1 mb-6" style={{ color: "#8C8A96", fontFamily: "'Work Sans', sans-serif" }}>
+        {isStaff ? t.up_sub : t.com_sub}
+      </p>
+
+      {status === "done" ? (
+        <div className="rounded-md p-6 text-center" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+          <div className="w-10 h-10 rounded-full mx-auto flex items-center justify-center mb-3" style={{ background: "#1E3028" }}>
+            <Check size={20} style={{ color: "#7BB88A" }} />
+          </div>
+          <p style={{ color: "#ECE8DD", fontFamily: "'Work Sans', sans-serif", fontWeight: 600 }}>
+            {isStaff ? t.done_title : t.done_title_com}
+          </p>
+          <p className="text-sm mt-1" style={{ color: "#8C8A96" }}>{form.title}</p>
+          <button onClick={reset} className="mt-4 text-sm px-4 py-2 rounded-md" style={{ border: "1px solid #2A2A38", color: "#ECE8DD" }}>{t.add_another}</button>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_title}</label>
+            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_year}</label>
+              <input value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} placeholder="2026"
+                className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
+            </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_duration}</label>
+              <input value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })} placeholder="1h20"
+                className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_genre}</label>
+            <select value={form.genreKey} onChange={(e) => setForm({ ...form, genreKey: e.target.value })}
+              className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }}>
+              {GENRE_KEYS.map((g) => <option key={g} value={g}>{t.genre[g]}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_desc}</label>
+            <textarea value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })} rows={3} placeholder={t.f_desc_ph}
+              className="w-full px-3 py-2 rounded-md text-sm outline-none resize-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
+          </div>
+          {!isStaff && (
+            <div>
+              <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_name}</label>
+              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_poster}</label>
+            <label className="flex flex-col items-center justify-center gap-2 py-6 rounded-md text-sm cursor-pointer" style={{ border: "1.5px dashed #2A2A38", color: "#8C8A96" }}>
+              <ImageIcon size={20} style={{ color: "#C9A15A" }} />
+              {posterFile ? posterFile.name : t.f_poster_ph}
+              <input type="file" accept="image/*" className="hidden" onChange={handlePoster} />
+            </label>
+          </div>
+          <div>
+            <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_video}</label>
+            <label className="flex flex-col items-center justify-center gap-2 py-6 rounded-md text-sm cursor-pointer" style={{ border: "1.5px dashed #2A2A38", color: "#8C8A96" }}>
+              <UploadCloud size={20} style={{ color: "#C9A15A" }} />
+              {videoFile ? videoFile.name : t.f_video_ph}
+              <input type="file" accept="video/*" className="hidden" onChange={handleFile} />
+            </label>
+          </div>
+          {status === "uploading" && (
+            <div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#1D1D29" }}>
+                <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: "#C9A15A" }} />
+              </div>
+              <p className="text-[11px] mt-1" style={{ color: "#8C8A96" }}>{t.uploading} {Math.round(progress)}%</p>
+            </div>
+          )}
+          {error && <p className="text-sm" style={{ color: "#D98080" }}>{error}</p>}
+          <button type="submit" disabled={!canSubmit && status !== "uploading"} className="w-full py-2.5 rounded-md text-sm font-semibold disabled:opacity-40" style={{ background: "#C9A15A", color: "#0A0A10" }}>
+            {status === "uploading" ? t.uploading : (isStaff ? t.submit : t.submit_com)}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function SettingsView({ t, settings, onSave }) {
+  const [logoFile, setLogoFile] = useState(null);
+  const [bgFile, setBgFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    await onSave({ logoFile, bgFile });
+    setSaving(false);
+  }
+
+  return (
+    <div className="max-w-lg mx-auto px-4 py-10">
+      <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.settings_title}</h2>
+      <div className="mt-6 space-y-5">
+        <div>
+          <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.logo_label}</label>
+          {settings.logo_url && <img src={settings.logo_url} alt="logo" className="h-10 mb-2 rounded" />}
+          <label className="flex items-center gap-2 py-3 px-3 rounded-md text-sm cursor-pointer" style={{ border: "1.5px dashed #2A2A38", color: "#8C8A96" }}>
+            <ImageIcon size={16} style={{ color: "#C9A15A" }} />
+            {logoFile ? logoFile.name : "Chwazi imaj logo"}
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => setLogoFile(e.target.files?.[0] || null)} />
+          </label>
+        </div>
+        <div>
+          <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.bg_label}</label>
+          {settings.background_url && <img src={settings.background_url} alt="bg" className="h-20 w-full object-cover mb-2 rounded" />}
+          <label className="flex items-center gap-2 py-3 px-3 rounded-md text-sm cursor-pointer" style={{ border: "1.5px dashed #2A2A38", color: "#8C8A96" }}>
+            <ImageIcon size={16} style={{ color: "#C9A15A" }} />
+            {bgFile ? bgFile.name : "Chwazi imaj fon"}
+            <input type="file" accept="image/*" className="hidden" onChange={(e) => setBgFile(e.target.files?.[0] || null)} />
+          </label>
+        </div>
+        <button onClick={handleSave} disabled={saving} className="w-full py-2.5 rounded-md text-sm font-semibold disabled:opacity-40" style={{ background: "#C9A15A", color: "#0A0A10" }}>
+          {saving ? "..." : t.save}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PendingView({ t, lang, films, onApprove }) {
+  const pending = films.filter((f) => f.status === "pending");
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-10">
+      <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.pending_title}</h2>
+      <div className="mt-5 space-y-3">
+        {pending.length === 0 && <p className="text-sm" style={{ color: "#8C8A96" }}>{t.no_pending}</p>}
+        {pending.map((f) => (
+          <div key={f.id} className="flex items-center justify-between p-3 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+            <div>
+              <p style={{ color: "#ECE8DD", fontWeight: 600 }}>{f.title[lang]}</p>
+              <p className="text-xs" style={{ color: "#8C8A96" }}>{t.genre[f.genreKey]} · {f.year}</p>
+            </div>
+            <button onClick={() => onApprove(f.id)} className="px-3 py-1.5 rounded-md text-xs font-semibold" style={{ background: "#C9A15A", color: "#0A0A10" }}>
+              {t.approve}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function HyperFilms() {
+  const [view, setView] = useState("catalog");
+  const [lang, setLang] = useState("fr");
+  const [langOpen, setLangOpen] = useState(false);
+  const [staffOpen, setStaffOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [films, setFilms] = useState(SEED_FILMS);
+  const [openFilm, setOpenFilm] = useState(null);
+  const [staffUser, setStaffUser] = useState(null);
+  const [settings, setSettings] = useState({ logo_url: "", background_url: "" });
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setStaffUser(data.user || null));
+    supabase.from("films").select("*").order("created_at", { ascending: false }).then(({ data, error }) => {
+      if (!error && data && data.length > 0) setFilms(data.map(dbRowToFilm));
+    });
+    supabase.from("site_settings").select("*").eq("id", 1).single().then(({ data }) => {
+      if (data) setSettings(data);
+    });
+  }, []);
+
+  async function insertFilm(newFilm, status) {
+    let poster_url = null;
+    if (newFilm.posterFile) {
+      const path = `posters/${Date.now()}-${newFilm.posterFile.name}`;
+      const { error: upErr } = await supabase.storage.from("site-assets").upload(path, newFilm.posterFile, { upsert: true });
+      if (!upErr) poster_url = supabase.storage.from("site-assets").getPublicUrl(path).data.publicUrl;
+    }
+    const { data, error } = await supabase.from("films").insert({
+      title_ht: newFilm.title.ht, title_fr: newFilm.title.fr, title_en: newFilm.title.en,
+      desc_ht: newFilm.desc.ht, desc_fr: newFilm.desc.fr, desc_en: newFilm.desc.en,
+      genre_key: newFilm.genreKey, year: parseInt(newFilm.year, 10) || null, duration: newFilm.duration,
+      status, submitted_name: newFilm.submittedName || null, created_by: staffUser?.id || null,
+      poster_url, video_url: newFilm.videoUrl || null,
+    }).select();
+    if (!error && data && data[0]) setFilms((prev) => [dbRowToFilm(data[0]), ...prev]);
+  }
+
+  async function handleApprove(id) {
+    const { error } = await supabase.from("films").update({ status: "approved" }).eq("id", id);
+    if (!error) setFilms((prev) => prev.map((f) => (f.id === id ? { ...f, status: "approved" } : f)));
+  }
+
+  async function handleSaveSettings({ logoFile, bgFile }) {
+    const updates = {};
+    if (logoFile) {
+      const path = `logo-${Date.now()}-${logoFile.name}`;
+      const { error } = await supabase.storage.from("site-assets").upload(path, logoFile, { upsert: true });
+      if (!error) updates.logo_url = supabase.storage.from("site-assets").getPublicUrl(path).data.publicUrl;
+    }
+    if (bgFile) {
+      const path = `bg-${Date.now()}-${bgFile.name}`;
+      const { error } = await supabase.storage.from("site-assets").upload(path, bgFile, { upsert: true });
+      if (!error) updates.background_url = supabase.storage.from("site-assets").getPublicUrl(path).data.publicUrl;
+    }
+    if (Object.keys(updates).length > 0) {
+      await supabase.from("site_settings").update(updates).eq("id", 1);
+      setSettings((prev) => ({ ...prev, ...updates }));
+    }
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setStaffUser(null);
+    setView("catalog");
+  }
+
+  function scrollToGenre(genreKey) {
+    setView("catalog");
+    setQuery("");
+    setTimeout(() => {
+      document.getElementById(`genre-row-${genreKey}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
+
+  const t = T[lang];
+  const approvedFilms = films.filter((f) => f.status === "approved");
+  const featured = approvedFilms.find((f) => f.featured) || approvedFilms[0];
+
+  const searchResults = useMemo(() => {
+    if (!query) return null;
+    return approvedFilms.filter((f) => f.title[lang].toLowerCase().includes(query.toLowerCase()));
+  }, [approvedFilms, query, lang]);
+
+  return (
+    <div className="min-h-screen" style={{ background: "#0A0A10" }}>
+      <style>{FONT_IMPORT}</style>
+
+      {/* Ticker */}
+      <Ticker />
+
+      {/* Nav */}
+      <div className="sticky top-0 z-40 flex items-center justify-between px-5 py-3 gap-3" style={{ background: "rgba(10,10,16,0.92)", backdropFilter: "blur(6px)", borderBottom: "1px solid #2A2A38" }}>
+        <button onClick={() => setView("catalog")} className="flex items-center gap-2 shrink-0">
+          {settings.logo_url ? (
+            <img src={settings.logo_url} alt="logo" className="h-7" />
+          ) : (
+            <>
+              <Film size={18} style={{ color: "#C9A15A" }} />
+              <span style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", letterSpacing: "0.04em", fontSize: "1.1rem" }}>CITADEL CINÉ</span>
+            </>
+          )}
+        </button>
+
+        <div className="hidden sm:flex items-center flex-1 max-w-xs px-3 py-1.5 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+          <Search size={14} style={{ color: "#8C8A96" }} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.search_ph}
+            className="bg-transparent outline-none ml-2 text-sm w-full" style={{ color: "#ECE8DD" }} />
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={() => setView("community")} className="hidden sm:flex px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
+            style={{ color: view === "community" ? "#0A0A10" : "#ECE8DD", background: view === "community" ? "#C9A15A" : "transparent" }}>
+            <UploadCloud size={14} /> {t.nav_community}
+          </button>
+
+          <WhatsAppButton t={t} />
+
+          <div className="relative">
+            <button onClick={() => setLangOpen((o) => !o)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm" style={{ color: "#ECE8DD", border: "1px solid #2A2A38" }}>
+              <Globe size={14} style={{ color: "#C9A15A" }} />
+              <span className="hidden sm:inline">{LANGS.find((l) => l.code === lang).label}</span>
+            </button>
+            {langOpen && (
+              <div className="absolute right-0 mt-1 rounded-md overflow-hidden z-50" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+                {LANGS.map((l) => (
+                  <button key={l.code} onClick={() => { setLang(l.code); setLangOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: l.code === lang ? "#C9A15A" : "#ECE8DD" }}>
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="relative">
+            <button onClick={() => setStaffOpen((o) => !o)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm" style={{ color: "#ECE8DD", border: "1px solid #2A2A38" }}>
+              <ShieldCheck size={14} style={{ color: "#C9A15A" }} />
+            </button>
+            {staffOpen && (
+              <div className="absolute right-0 mt-1 rounded-md overflow-hidden z-50" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+                {staffUser ? (
+                  <>
+                    <button onClick={() => { setView("upload"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.nav_staff}: {t.submit}</button>
+                    <button onClick={() => { setView("pending"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.pending_title}</button>
+                    <button onClick={() => { setView("settings"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.nav_settings}</button>
+                    <button onClick={handleLogout} className="flex items-center gap-1.5 w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#8C8A96" }}><LogOut size={13} /> Logout</button>
+                  </>
+                ) : (
+                  <button onClick={() => { setView("upload"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.login_staff}</button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {(view === "catalog") && <GenreNav t={t} onSelect={scrollToGenre} />}
+
+      {view === "upload" ? (
+        staffUser ? <UploadForm lang={lang} t={t} isStaff={true} onSubmitFilm={(f) => insertFilm(f, "approved")} /> : <LoginGate lang={lang} onLoggedIn={setStaffUser} />
+      ) : view === "community" ? (
+        <UploadForm lang={lang} t={t} isStaff={false} onSubmitFilm={(f) => insertFilm(f, "pending")} />
+      ) : view === "settings" && staffUser ? (
+        <SettingsView t={t} settings={settings} onSave={handleSaveSettings} />
+      ) : view === "pending" && staffUser ? (
+        <PendingView t={t} lang={lang} films={films} onApprove={handleApprove} />
+      ) : (
+        <>
+          {/* Hero */}
+          {featured && (
+            <div className="relative flex items-end px-6 sm:px-10 py-16 sm:py-28"
+              style={{
+                background: settings.background_url
+                  ? `linear-gradient(to top, #0A0A10 5%, rgba(10,10,16,0.5) 60%, rgba(10,10,16,0.2)), url(${settings.background_url}) center/cover`
+                  : featured.posterUrl
+                  ? `linear-gradient(to top, #0A0A10 5%, rgba(10,10,16,0.5) 60%, rgba(10,10,16,0.2)), url(${featured.posterUrl}) center/cover`
+                  : `linear-gradient(120deg, ${featured.color}, #0A0A10 75%)`,
+                borderBottom: "1px solid #2A2A38",
+              }}>
+              <div className="max-w-lg">
+                <span className="text-[11px] tracking-widest uppercase" style={{ color: "#C9A15A" }}>{t.featured}</span>
+                <h1 className="mt-2" style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "clamp(1.8rem, 5vw, 3rem)", lineHeight: 1.05 }}>
+                  {featured.title[lang].toUpperCase()}
+                </h1>
+                <p className="mt-3 text-sm leading-relaxed max-w-md" style={{ color: "#B8B5C0", fontFamily: "'Work Sans', sans-serif" }}>{featured.desc[lang]}</p>
+                <div className="flex gap-2 mt-5">
+                  <button onClick={() => setOpenFilm(featured)} className="flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold" style={{ background: "#C9A15A", color: "#0A0A10" }}>
+                    <Play size={15} fill="#0A0A10" /> {t.watch}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {searchResults ? (
+            <div className="px-5 sm:px-10 py-6 flex flex-wrap gap-4">
+              {searchResults.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} />)}
+              {searchResults.length === 0 && <p className="text-sm py-10" style={{ color: "#8C8A96" }}>{t.empty}</p>}
+            </div>
+          ) : (
+            <div className="py-4 pb-16">
+              {GENRE_KEYS.map((g) => <Row key={g} genreKey={g} films={approvedFilms} lang={lang} t={t} onOpen={setOpenFilm} />)}
+            </div>
+          )}
+        </>
+      )}
+
+      <DetailModal film={openFilm} lang={lang} t={t} onClose={() => setOpenFilm(null)} />
+    </div>
+  );
+}
