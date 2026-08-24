@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
+import * as tus from "tus-js-client";
 import { Play, Info, Search, UploadCloud, Film, X, Check, Clock, CalendarDays, Globe, LogOut, MessageCircle, Image as ImageIcon, ShieldCheck } from "lucide-react";
 import { supabase } from "./supabaseClient";
 
@@ -355,20 +356,36 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!videoFile) { setError(t.err_file); return; }
-    setError(""); setStatus("uploading"); setProgress(15);
+    setError(""); setStatus("uploading"); setProgress(5);
 
     try {
-      const fd = new FormData();
-      fd.append("file", videoFile);
-      fd.append("title", form.title);
-
-      const res = await fetch(
-        "https://wepevdfxxihcqwmektnt.supabase.co/functions/v1/upload-video",
-        { method: "POST", body: fd }
+      // Etap 1: mande Edge Function la kreye antre a nan Bunny + ban nou yon siyati (ti demand rapid)
+      const createRes = await fetch(
+        "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/upload-video",
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.title }) }
       );
-      setProgress(80);
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Upload echwe");
+      const created = await createRes.json();
+      if (!createRes.ok) throw new Error(created.error || "Echèk kreyasyon videyo");
+      setProgress(15);
+
+      // Etap 2: voye gwo fichye a DIRÈKTEMAN bay Bunny (pa pase pa Supabase)
+      await new Promise((resolve, reject) => {
+        const upload = new tus.Upload(videoFile, {
+          endpoint: "https://video.bunnycdn.com/tusupload",
+          retryDelays: [0, 3000, 5000, 10000, 20000],
+          headers: {
+            AuthorizationSignature: created.signature,
+            AuthorizationExpire: String(created.expirationTime),
+            VideoId: created.videoId,
+            LibraryId: String(created.libraryId),
+          },
+          metadata: { filetype: videoFile.type, title: form.title },
+          onError: (err) => reject(err),
+          onProgress: (sent, total) => setProgress(15 + Math.round((sent / total) * 80)),
+          onSuccess: () => resolve(),
+        });
+        upload.start();
+      });
 
       setProgress(100);
       setStatus("done");
@@ -378,7 +395,7 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
         desc: { ht: form.desc || "Pa gen deskripsyon.", fr: form.desc || "Pas de description.", en: form.desc || "No description." },
         submittedName: form.name,
         posterFile,
-        videoUrl: result.playbackUrl,
+        videoUrl: created.playbackUrl,
       });
     } catch (err) {
       setStatus("idle");
