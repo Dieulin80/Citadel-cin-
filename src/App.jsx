@@ -46,6 +46,8 @@ const T = {
     continue_watching: "Kontinye Gade", top10: "Top 10 Semèn nan", similar: "Fim Similè",
     rate_this: "Bay yon nòt", your_rating: "Nòt ou", release_label: "Sòti",
     f_release: "Dat Sòti (opsyonèl — pou 'K ap Vini')", search_expand: "Chèche",
+    offline_download: "Telechaje pou Gade Offline", offline_ready: "Disponib Offline ✓", offline_downloading: "K ap telechaje pou offline...",
+    nav_offline: "Videyo Offline", no_offline: "Ou poko telechaje okenn videyo pou gade san entènèt.",
   },
   fr: {
     nav_catalog: "Catalogue", nav_community: "Envoyer une vidéo", nav_staff: "Staff", nav_settings: "Paramètres",
@@ -68,6 +70,8 @@ const T = {
     continue_watching: "Continuer à regarder", top10: "Top 10 de la semaine", similar: "Films similaires",
     rate_this: "Donner une note", your_rating: "Votre note", release_label: "Sortie",
     f_release: "Date de sortie (optionnel — pour 'Bientôt disponible')", search_expand: "Rechercher",
+    offline_download: "Télécharger pour regarder hors-ligne", offline_ready: "Disponible hors-ligne ✓", offline_downloading: "Téléchargement hors-ligne en cours...",
+    nav_offline: "Vidéos hors-ligne", no_offline: "Vous n'avez encore téléchargé aucune vidéo hors-ligne.",
   },
   en: {
     nav_catalog: "Catalog", nav_community: "Submit a video", nav_staff: "Staff", nav_settings: "Settings",
@@ -90,6 +94,8 @@ const T = {
     continue_watching: "Continue Watching", top10: "Top 10 This Week", similar: "Similar Films",
     rate_this: "Rate this", your_rating: "Your rating", release_label: "Release",
     f_release: "Release date (optional — for 'Coming Soon')", search_expand: "Search",
+    offline_download: "Download to Watch Offline", offline_ready: "Available Offline ✓", offline_downloading: "Downloading for offline...",
+    nav_offline: "Offline Videos", no_offline: "You haven't downloaded any videos for offline viewing yet.",
   },
 };
 
@@ -376,7 +382,27 @@ function SimpleRow({ title, list, lang, t, onOpen, myList, setMyList }) {
 function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOpen }) {
   const [playing, setPlaying] = useState(false);
   const [myRating, setMyRating] = useState(() => getLocalList("hf_rated").find((r) => r.id === film?.id)?.stars || 0);
+  const [offlineStatus, setOfflineStatus] = useState("idle"); // idle | downloading | ready
   const viewedRef = useRef(null);
+
+  useEffect(() => {
+    if (film && getLocalList("hf_offline").includes(film.id)) setOfflineStatus("ready");
+    else setOfflineStatus("idle");
+  }, [film]);
+
+  async function handleOfflineDownload() {
+    if (!film.videoUrl || !("caches" in window)) return;
+    setOfflineStatus("downloading");
+    try {
+      const cache = await caches.open("citadel-videos-v1");
+      await cache.add(film.videoUrl);
+      const list = getLocalList("hf_offline");
+      setLocalList("hf_offline", [...new Set([...list, film.id])]);
+      setOfflineStatus("ready");
+    } catch {
+      setOfflineStatus("idle");
+    }
+  }
 
   useEffect(() => {
     if (film && viewedRef.current !== film.id) {
@@ -475,6 +501,16 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
               <UploadCloud size={15} style={{ transform: "rotate(180deg)" }} /> {t.download}
             </a>
           )}
+          {film.videoUrl && (
+            <button
+              onClick={handleOfflineDownload}
+              disabled={offlineStatus !== "idle"}
+              className="flex items-center justify-center gap-2 mt-2 w-full py-2.5 rounded-md text-sm disabled:opacity-80"
+              style={{ border: "1px solid #2A2A38", color: offlineStatus === "ready" ? "#7BB88A" : "#C9A15A" }}
+            >
+              {offlineStatus === "ready" ? t.offline_ready : offlineStatus === "downloading" ? t.offline_downloading : t.offline_download}
+            </button>
+          )}
         </div>
 
         {similar.length > 0 && (
@@ -549,10 +585,14 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
       fd.append("file", videoFile);
       fd.append("title", form.title);
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 segond max
+
       const res = await fetch(
         "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/upload-video",
-        { method: "POST", body: fd }
+        { method: "POST", body: fd, signal: controller.signal }
       );
+      clearTimeout(timeoutId);
       setProgress(80);
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || "Upload echwe");
@@ -571,7 +611,8 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
     } catch (err) {
       setStatus("idle");
       setProgress(0);
-      setError(String(err.message || err) + " (eseye ankò — sa ka yon ti koupi rezo)");
+      const msg = err.name === "AbortError" ? "Telechajman an pran twò lontan (koneksyon lan lan) — eseye ankò" : String(err.message || err) + " (eseye ankò — sa ka yon ti koupi rezo)";
+      setError(msg);
     }
   }
 
@@ -840,6 +881,11 @@ export default function HyperFilms() {
     return myList.map((id) => approvedFilms.find((f) => f.id === id)).filter(Boolean);
   }, [approvedFilms, myList]);
 
+  const offlineFilms = useMemo(() => {
+    const ids = getLocalList("hf_offline");
+    return ids.map((id) => approvedFilms.find((f) => f.id === id)).filter(Boolean);
+  }, [approvedFilms, openFilm]);
+
   const searchResults = useMemo(() => {
     if (!query) return null;
     return approvedFilms.filter((f) => f.title[lang].toLowerCase().includes(query.toLowerCase()));
@@ -879,6 +925,11 @@ export default function HyperFilms() {
         </button>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={() => setView("offline")} className="hidden sm:flex px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
+            style={{ color: view === "offline" ? "#0A0A10" : "#ECE8DD", background: view === "offline" ? "#C9A15A" : "transparent" }}>
+            ⬇ {t.nav_offline}
+          </button>
+
           <button onClick={() => setView("mylist")} className="hidden sm:flex px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
             style={{ color: view === "mylist" ? "#0A0A10" : "#ECE8DD", background: view === "mylist" ? "#C9A15A" : "transparent" }}>
             ✓ {t.my_list}
@@ -956,6 +1007,14 @@ export default function HyperFilms() {
           <div className="flex flex-wrap gap-4 mt-5">
             {myListFilms.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
             {myListFilms.length === 0 && <p className="text-sm" style={{ color: "#8C8A96" }}>{t.empty}</p>}
+          </div>
+        </div>
+      ) : view === "offline" ? (
+        <div className="px-5 sm:px-10 py-10">
+          <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.nav_offline}</h2>
+          <div className="flex flex-wrap gap-4 mt-5">
+            {offlineFilms.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
+            {offlineFilms.length === 0 && <p className="text-sm" style={{ color: "#8C8A96" }}>{t.no_offline}</p>}
           </div>
         </div>
       ) : (
