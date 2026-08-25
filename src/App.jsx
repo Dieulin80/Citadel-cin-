@@ -41,6 +41,11 @@ const T = {
     add_another: "Ajoute yon lòt vidyo", contact: "Kontakte Nou", login_staff: "Koneksyon Staff",
     settings_title: "PARAMÈT SIT LA", logo_label: "Logo Sit la", bg_label: "Imaj Fon (Background)", save: "Anrejistre",
     pending_title: "FIM K AP TANN APWOBASYON", approve: "Apwouve", no_pending: "Pa gen fim k ap tann apwobasyon.",
+    coming_soon: "K AP VINI", interested: "Enterese", interested_count: "moun enterese",
+    my_list: "Ma Lis", add_list: "Ajoute nan Lis mwen", remove_list: "Retire nan Lis mwen",
+    continue_watching: "Kontinye Gade", top10: "Top 10 Semèn nan", similar: "Fim Similè",
+    rate_this: "Bay yon nòt", your_rating: "Nòt ou", release_label: "Sòti",
+    f_release: "Dat Sòti (opsyonèl — pou 'K ap Vini')", search_expand: "Chèche",
   },
   fr: {
     nav_catalog: "Catalogue", nav_community: "Envoyer une vidéo", nav_staff: "Staff", nav_settings: "Paramètres",
@@ -58,6 +63,11 @@ const T = {
     add_another: "Ajouter une autre vidéo", contact: "Nous contacter", login_staff: "Connexion Staff",
     settings_title: "PARAMÈTRES DU SITE", logo_label: "Logo du site", bg_label: "Image de fond", save: "Enregistrer",
     pending_title: "VIDÉOS EN ATTENTE", approve: "Approuver", no_pending: "Aucune vidéo en attente.",
+    coming_soon: "BIENTÔT DISPONIBLE", interested: "Intéressé(e)", interested_count: "personnes intéressées",
+    my_list: "Ma Liste", add_list: "Ajouter à Ma Liste", remove_list: "Retirer de Ma Liste",
+    continue_watching: "Continuer à regarder", top10: "Top 10 de la semaine", similar: "Films similaires",
+    rate_this: "Donner une note", your_rating: "Votre note", release_label: "Sortie",
+    f_release: "Date de sortie (optionnel — pour 'Bientôt disponible')", search_expand: "Rechercher",
   },
   en: {
     nav_catalog: "Catalog", nav_community: "Submit a video", nav_staff: "Staff", nav_settings: "Settings",
@@ -75,6 +85,11 @@ const T = {
     add_another: "Add another video", contact: "Contact Us", login_staff: "Staff Login",
     settings_title: "SITE SETTINGS", logo_label: "Site Logo", bg_label: "Background Image", save: "Save",
     pending_title: "PENDING VIDEOS", approve: "Approve", no_pending: "No pending videos.",
+    coming_soon: "COMING SOON", interested: "Interested", interested_count: "people interested",
+    my_list: "My List", add_list: "Add to My List", remove_list: "Remove from My List",
+    continue_watching: "Continue Watching", top10: "Top 10 This Week", similar: "Similar Films",
+    rate_this: "Rate this", your_rating: "Your rating", release_label: "Release",
+    f_release: "Release date (optional — for 'Coming Soon')", search_expand: "Search",
   },
 };
 
@@ -104,9 +119,27 @@ function dbRowToFilm(row) {
     id: row.id, genreKey: row.genre_key, year: row.year, duration: row.duration,
     color: "#2A2A1E", featured: row.featured, status: row.status,
     posterUrl: row.poster_url || null, videoUrl: row.video_url || null,
+    releaseDate: row.release_date || null,
+    reactionCount: row.reaction_count || 0,
+    ratingSum: row.rating_sum || 0,
+    ratingCount: row.rating_count || 0,
+    viewCount: row.view_count || 0,
     title: { ht: row.title_ht, fr: row.title_fr, en: row.title_en },
     desc: { ht: row.desc_ht, fr: row.desc_fr, en: row.desc_en },
   };
+}
+
+function isUpcoming(film) {
+  if (!film.releaseDate) return false;
+  return new Date(film.releaseDate) > new Date();
+}
+
+// ---- "Ma Liste" ak "Kontinye Gade" — estoke lokalman sou telefòn/navigatè a ----
+function getLocalList(key) {
+  try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch { return []; }
+}
+function setLocalList(key, list) {
+  try { localStorage.setItem(key, JSON.stringify(list)); } catch {}
 }
 
 function WhatsAppButton({ t }) {
@@ -177,13 +210,111 @@ function GenreNav({ t, onSelect }) {
   );
 }
 
-function FilmCard({ film, lang, t, onOpen }) {
+function StarRating({ film, size = 16, onRate }) {
+  const [hover, setHover] = useState(0);
+  const avg = film.ratingCount > 0 ? film.ratingSum / film.ratingCount : 0;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex gap-0.5">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            onClick={() => onRate && onRate(n)}
+            onMouseEnter={() => setHover(n)}
+            onMouseLeave={() => setHover(0)}
+            style={{ color: (hover || Math.round(avg)) >= n ? "#C9A15A" : "#3A3A45", lineHeight: 0 }}
+          >
+            ★
+          </button>
+        ))}
+      </div>
+      {film.ratingCount > 0 && <span className="text-[11px]" style={{ color: "#8C8A96" }}>{avg.toFixed(1)} ({film.ratingCount})</span>}
+    </div>
+  );
+}
+
+function MyListButton({ filmId, myList, setMyList }) {
+  const inList = myList.includes(filmId);
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        const next = inList ? myList.filter((id) => id !== filmId) : [...myList, filmId];
+        setMyList(next);
+        setLocalList("hf_my_list", next);
+      }}
+      className="absolute top-2 left-2 w-6 h-6 rounded-full flex items-center justify-center text-sm z-10"
+      style={{ background: "rgba(10,10,16,0.7)", color: inList ? "#C9A15A" : "#ECE8DD" }}
+    >
+      {inList ? "✓" : "+"}
+    </button>
+  );
+}
+
+function ComingSoonCard({ film, lang, t }) {
+  const [reacted, setReacted] = useState(() => getLocalList("hf_reacted").includes(film.id));
+  const [count, setCount] = useState(film.reactionCount);
+
+  async function handleReact() {
+    if (reacted) return;
+    setReacted(true);
+    setCount((c) => c + 1);
+    const list = getLocalList("hf_reacted");
+    setLocalList("hf_reacted", [...list, film.id]);
+    await supabase.rpc("increment_film_counter", { p_film_id: film.id, p_field: "reaction_count", p_amount: 1 });
+  }
+
+  const dateLabel = film.releaseDate ? new Date(film.releaseDate).toLocaleDateString(lang === "en" ? "en-US" : lang === "fr" ? "fr-FR" : "fr-HT") : "";
+
+  return (
+    <div className="shrink-0 w-[160px] rounded-md overflow-hidden" style={{ background: "#15151F" }}>
+      <div
+        className="aspect-[2/3] w-full"
+        style={
+          film.posterUrl
+            ? { backgroundImage: `linear-gradient(to top, rgba(10,10,16,0.9), rgba(10,10,16,0.1)), url(${film.posterUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+            : { background: `linear-gradient(160deg, ${film.color}, #0A0A10)` }
+        }
+      />
+      <div className="p-2.5">
+        <p className="text-sm leading-tight truncate" style={{ color: "#ECE8DD", fontFamily: "'Work Sans', sans-serif", fontWeight: 600 }}>{film.title[lang]}</p>
+        <p className="text-[11px] mt-0.5" style={{ color: "#C9A15A" }}>{t.release_label}: {dateLabel}</p>
+        <button
+          onClick={handleReact}
+          disabled={reacted}
+          className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-semibold disabled:opacity-70"
+          style={{ background: reacted ? "#1D1D29" : "#C9A15A", color: reacted ? "#C9A15A" : "#0A0A10", border: reacted ? "1px solid #C9A15A" : "none" }}
+        >
+          🔥 {reacted ? t.interested : t.interested}
+        </button>
+        <p className="text-[10px] mt-1 text-center" style={{ color: "#8C8A96" }}>{count} {t.interested_count}</p>
+      </div>
+    </div>
+  );
+}
+
+function ComingSoonRow({ films, lang, t }) {
+  const upcoming = films.filter(isUpcoming).sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate));
+  if (upcoming.length === 0) return null;
+  return (
+    <div className="py-3">
+      <h2 className="px-5 sm:px-10 mb-2 text-sm font-semibold" style={{ color: "#ECE8DD", fontFamily: "'Work Sans', sans-serif" }}>{t.coming_soon}</h2>
+      <div className="flex gap-3 px-5 sm:px-10 overflow-x-auto pb-2">
+        {upcoming.map((f) => <ComingSoonCard key={f.id} film={f} lang={lang} t={t} />)}
+      </div>
+    </div>
+  );
+}
+
+function FilmCard({ film, lang, t, onOpen, myList, setMyList }) {
+  const avg = film.ratingCount > 0 ? (film.ratingSum / film.ratingCount).toFixed(1) : null;
   return (
     <button
       onClick={() => onOpen(film)}
       className="group relative text-left rounded-md overflow-hidden shrink-0 w-[140px] sm:w-[160px] focus:outline-none"
       style={{ backgroundColor: "#15151F" }}
     >
+      {myList && setMyList && <MyListButton filmId={film.id} myList={myList} setMyList={setMyList} />}
       <div
         className="aspect-[2/3] w-full flex items-end p-3 transition-transform duration-300 group-hover:scale-[1.05]"
         style={
@@ -201,6 +332,11 @@ function FilmCard({ film, lang, t, onOpen }) {
       <div className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(10,10,16,0.7)", color: "#8C8A96" }}>
         {film.year}
       </div>
+      {avg && (
+        <div className="absolute bottom-[52px] left-2 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5" style={{ background: "rgba(10,10,16,0.7)", color: "#C9A15A" }}>
+          ★ {avg}
+        </div>
+      )}
       <div className="p-2">
         <p className="text-sm leading-tight truncate" style={{ color: "#ECE8DD", fontFamily: "'Work Sans', sans-serif", fontWeight: 600 }}>
           {film.title[lang]}
@@ -210,7 +346,7 @@ function FilmCard({ film, lang, t, onOpen }) {
   );
 }
 
-function Row({ genreKey, films, lang, t, onOpen }) {
+function Row({ genreKey, films, lang, t, onOpen, myList, setMyList }) {
   const list = films.filter((f) => f.genreKey === genreKey);
   if (list.length === 0) return null;
   return (
@@ -219,23 +355,57 @@ function Row({ genreKey, films, lang, t, onOpen }) {
         {t.genre[genreKey]}
       </h2>
       <div className="flex gap-3 px-5 sm:px-10 overflow-x-auto pb-2">
-        {list.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={onOpen} />)}
+        {list.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={onOpen} myList={myList} setMyList={setMyList} />)}
       </div>
     </div>
   );
 }
 
-function DetailModal({ film, lang, t, onClose }) {
+function SimpleRow({ title, list, lang, t, onOpen, myList, setMyList }) {
+  if (list.length === 0) return null;
+  return (
+    <div className="py-3">
+      <h2 className="px-5 sm:px-10 mb-2 text-sm font-semibold" style={{ color: "#ECE8DD", fontFamily: "'Work Sans', sans-serif" }}>{title}</h2>
+      <div className="flex gap-3 px-5 sm:px-10 overflow-x-auto pb-2">
+        {list.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={onOpen} myList={myList} setMyList={setMyList} />)}
+      </div>
+    </div>
+  );
+}
+
+function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOpen }) {
   const [playing, setPlaying] = useState(false);
+  const [myRating, setMyRating] = useState(() => getLocalList("hf_rated").find((r) => r.id === film?.id)?.stars || 0);
+  const viewedRef = useRef(null);
+
+  useEffect(() => {
+    if (film && viewedRef.current !== film.id) {
+      viewedRef.current = film.id;
+      supabase.rpc("increment_film_counter", { p_film_id: film.id, p_field: "view_count", p_amount: 1 });
+      const list = getLocalList("hf_recent").filter((id) => id !== film.id);
+      setLocalList("hf_recent", [film.id, ...list].slice(0, 12));
+    }
+  }, [film]);
+
   if (!film) return null;
 
   // Ekstrè videoId nan lyen playback la (egzanp: https://cdn/{videoId}/play_720p.mp4)
   const videoId = film.videoUrl ? film.videoUrl.split("/").slice(-2, -1)[0] : null;
   const embedUrl = videoId ? `https://iframe.mediadelivery.net/embed/732337/${videoId}?autoplay=true` : null;
 
+  async function handleRate(stars) {
+    const already = getLocalList("hf_rated");
+    if (already.find((r) => r.id === film.id)) return;
+    setMyRating(stars);
+    setLocalList("hf_rated", [...already, { id: film.id, stars }]);
+    await supabase.rpc("add_film_rating", { p_film_id: film.id, p_stars: stars });
+  }
+
+  const similar = (allFilms || []).filter((f) => f.genreKey === film.genreKey && f.id !== film.id && f.status === "approved" && !isUpcoming(f)).slice(0, 6);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(6,6,10,0.85)" }} onClick={() => { onClose(); setPlaying(false); }}>
-      <div className="w-full max-w-lg rounded-lg overflow-hidden" style={{ background: "#15151F", border: "1px solid #2A2A38" }} onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: "rgba(6,6,10,0.85)" }} onClick={() => { onClose(); setPlaying(false); }}>
+      <div className="w-full max-w-lg rounded-lg overflow-hidden my-8" style={{ background: "#15151F", border: "1px solid #2A2A38" }} onClick={(e) => e.stopPropagation()}>
         {playing && embedUrl ? (
           <div className="relative w-full" style={{ aspectRatio: "16/9", background: "#000" }}>
             <iframe
@@ -261,6 +431,7 @@ function DetailModal({ film, lang, t, onClose }) {
             <button onClick={onClose} className="absolute top-3 right-3 p-1.5 rounded-full" style={{ background: "rgba(10,10,16,0.6)", color: "#ECE8DD" }}>
               <X size={16} />
             </button>
+            {myList && setMyList && <MyListButton filmId={film.id} myList={myList} setMyList={setMyList} />}
           </div>
         )}
         <div className="p-5">
@@ -273,7 +444,13 @@ function DetailModal({ film, lang, t, onClose }) {
             <span style={{ color: "#C9A15A" }}>{t.genre[film.genreKey]}</span>
           </div>
           <p className="mt-3 text-sm leading-relaxed" style={{ color: "#B8B5C0", fontFamily: "'Work Sans', sans-serif" }}>{film.desc[lang]}</p>
-          <div className="flex gap-2 mt-5">
+
+          <div className="mt-3">
+            <p className="text-[11px] mb-1" style={{ color: "#8C8A96" }}>{myRating ? t.your_rating : t.rate_this}</p>
+            <StarRating film={film} onRate={myRating ? undefined : handleRate} />
+          </div>
+
+          <div className="flex gap-2 mt-4">
             <button
               onClick={() => embedUrl && setPlaying(true)}
               disabled={!embedUrl}
@@ -299,6 +476,15 @@ function DetailModal({ film, lang, t, onClose }) {
             </a>
           )}
         </div>
+
+        {similar.length > 0 && (
+          <div className="pb-5">
+            <h4 className="px-5 mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "#8C8A96" }}>{t.similar}</h4>
+            <div className="flex gap-3 px-5 overflow-x-auto pb-1">
+              {similar.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={onOpen} myList={myList} setMyList={setMyList} />)}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -342,7 +528,7 @@ function LoginGate({ lang, onLoggedIn }) {
 }
 
 function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
-  const [form, setForm] = useState({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "" });
+  const [form, setForm] = useState({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "" });
   const [videoFile, setVideoFile] = useState(null);
   const [posterFile, setPosterFile] = useState(null);
   const [error, setError] = useState("");
@@ -356,36 +542,20 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!videoFile) { setError(t.err_file); return; }
-    setError(""); setStatus("uploading"); setProgress(5);
+    setError(""); setStatus("uploading"); setProgress(15);
 
     try {
-      // Etap 1: mande Edge Function la kreye antre a nan Bunny + ban nou yon siyati (ti demand rapid)
-      const createRes = await fetch(
-        "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/upload-video",
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.title }) }
-      );
-      const created = await createRes.json();
-      if (!createRes.ok) throw new Error(created.error || "Echèk kreyasyon videyo");
-      setProgress(15);
+      const fd = new FormData();
+      fd.append("file", videoFile);
+      fd.append("title", form.title);
 
-      // Etap 2: voye gwo fichye a DIRÈKTEMAN bay Bunny (pa pase pa Supabase)
-      await new Promise((resolve, reject) => {
-        const upload = new tus.Upload(videoFile, {
-          endpoint: "https://video.bunnycdn.com/tusupload",
-          retryDelays: [0, 3000, 5000, 10000, 20000],
-          headers: {
-            AuthorizationSignature: created.signature,
-            AuthorizationExpire: String(created.expirationTime),
-            VideoId: created.videoId,
-            LibraryId: String(created.libraryId),
-          },
-          metadata: { filetype: videoFile.type, title: form.title },
-          onError: (err) => reject(err),
-          onProgress: (sent, total) => setProgress(15 + Math.round((sent / total) * 80)),
-          onSuccess: () => resolve(),
-        });
-        upload.start();
-      });
+      const res = await fetch(
+        "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/upload-video",
+        { method: "POST", body: fd }
+      );
+      setProgress(80);
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Upload echwe");
 
       setProgress(100);
       setStatus("done");
@@ -395,17 +565,18 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
         desc: { ht: form.desc || "Pa gen deskripsyon.", fr: form.desc || "Pas de description.", en: form.desc || "No description." },
         submittedName: form.name,
         posterFile,
-        videoUrl: created.playbackUrl,
+        videoUrl: result.playbackUrl,
+        releaseDate: form.releaseDate || null,
       });
     } catch (err) {
       setStatus("idle");
       setProgress(0);
-      setError(String(err.message || err));
+      setError(String(err.message || err) + " (eseye ankò — sa ka yon ti koupi rezo)");
     }
   }
 
   function reset() {
-    setForm({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "" });
+    setForm({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "" });
     setVideoFile(null); setPosterFile(null); setStatus("idle"); setProgress(0);
   }
 
@@ -467,6 +638,11 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
                 className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
             </div>
           )}
+          <div>
+            <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_release}</label>
+            <input type="date" value={form.releaseDate} onChange={(e) => setForm({ ...form, releaseDate: e.target.value })}
+              className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
+          </div>
           <div>
             <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_poster}</label>
             <label className="flex flex-col items-center justify-center gap-2 py-6 rounded-md text-sm cursor-pointer" style={{ border: "1.5px dashed #2A2A38", color: "#8C8A96" }}>
@@ -575,6 +751,12 @@ export default function HyperFilms() {
   const [openFilm, setOpenFilm] = useState(null);
   const [staffUser, setStaffUser] = useState(null);
   const [settings, setSettings] = useState({ logo_url: "", background_url: "" });
+  const [myList, setMyList] = useState([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    setMyList(getLocalList("hf_my_list"));
+  }, []);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setStaffUser(data.user || null));
@@ -598,7 +780,7 @@ export default function HyperFilms() {
       desc_ht: newFilm.desc.ht, desc_fr: newFilm.desc.fr, desc_en: newFilm.desc.en,
       genre_key: newFilm.genreKey, year: parseInt(newFilm.year, 10) || null, duration: newFilm.duration,
       status, submitted_name: newFilm.submittedName || null, created_by: staffUser?.id || null,
-      poster_url, video_url: newFilm.videoUrl || null,
+      poster_url, video_url: newFilm.videoUrl || null, release_date: newFilm.releaseDate || null,
     }).select();
     if (!error && data && data[0]) setFilms((prev) => [dbRowToFilm(data[0]), ...prev]);
   }
@@ -641,8 +823,22 @@ export default function HyperFilms() {
   }
 
   const t = T[lang];
-  const approvedFilms = films.filter((f) => f.status === "approved");
+  const approvedAll = films.filter((f) => f.status === "approved");
+  const approvedFilms = approvedAll.filter((f) => !isUpcoming(f));
   const featured = approvedFilms.find((f) => f.featured) || approvedFilms[0];
+
+  const continueWatching = useMemo(() => {
+    const ids = getLocalList("hf_recent");
+    return ids.map((id) => approvedFilms.find((f) => f.id === id)).filter(Boolean);
+  }, [approvedFilms, openFilm]);
+
+  const top10 = useMemo(() => {
+    return [...approvedFilms].sort((a, b) => b.viewCount - a.viewCount).slice(0, 10);
+  }, [approvedFilms]);
+
+  const myListFilms = useMemo(() => {
+    return myList.map((id) => approvedFilms.find((f) => f.id === id)).filter(Boolean);
+  }, [approvedFilms, myList]);
 
   const searchResults = useMemo(() => {
     if (!query) return null;
@@ -669,13 +865,25 @@ export default function HyperFilms() {
           )}
         </button>
 
-        <div className="hidden sm:flex items-center flex-1 max-w-xs px-3 py-1.5 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
-          <Search size={14} style={{ color: "#8C8A96" }} />
+        <div className="hidden sm:flex items-center flex-1 max-w-xs px-3 py-1.5 rounded-full transition-all focus-within:ring-1" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+          <Search size={14} style={{ color: "#C9A15A" }} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.search_ph}
             className="bg-transparent outline-none ml-2 text-sm w-full" style={{ color: "#ECE8DD" }} />
+          {query && (
+            <button onClick={() => setQuery("")} style={{ color: "#8C8A96" }}><X size={14} /></button>
+          )}
         </div>
 
+        <button onClick={() => setSearchOpen((o) => !o)} className="sm:hidden p-2 rounded-full" style={{ border: "1px solid #2A2A38", color: "#C9A15A" }}>
+          <Search size={16} />
+        </button>
+
         <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={() => setView("mylist")} className="hidden sm:flex px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
+            style={{ color: view === "mylist" ? "#0A0A10" : "#ECE8DD", background: view === "mylist" ? "#C9A15A" : "transparent" }}>
+            ✓ {t.my_list}
+          </button>
+
           <button onClick={() => setView("community")} className="hidden sm:flex px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
             style={{ color: view === "community" ? "#0A0A10" : "#ECE8DD", background: view === "community" ? "#C9A15A" : "transparent" }}>
             <UploadCloud size={14} /> {t.nav_community}
@@ -721,6 +929,17 @@ export default function HyperFilms() {
         </div>
       </div>
 
+      {searchOpen && (
+        <div className="sm:hidden flex items-center gap-2 px-5 py-2.5" style={{ background: "#0A0A10", borderBottom: "1px solid #2A2A38" }}>
+          <div className="flex items-center flex-1 px-3 py-2 rounded-full" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+            <Search size={14} style={{ color: "#C9A15A" }} />
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.search_ph}
+              className="bg-transparent outline-none ml-2 text-sm w-full" style={{ color: "#ECE8DD" }} />
+          </div>
+          <button onClick={() => { setSearchOpen(false); setQuery(""); }} style={{ color: "#8C8A96" }}><X size={18} /></button>
+        </div>
+      )}
+
       {(view === "catalog") && <GenreNav t={t} onSelect={scrollToGenre} />}
 
       {view === "upload" ? (
@@ -731,6 +950,14 @@ export default function HyperFilms() {
         <SettingsView t={t} settings={settings} onSave={handleSaveSettings} />
       ) : view === "pending" && staffUser ? (
         <PendingView t={t} lang={lang} films={films} onApprove={handleApprove} />
+      ) : view === "mylist" ? (
+        <div className="px-5 sm:px-10 py-10">
+          <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.my_list}</h2>
+          <div className="flex flex-wrap gap-4 mt-5">
+            {myListFilms.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
+            {myListFilms.length === 0 && <p className="text-sm" style={{ color: "#8C8A96" }}>{t.empty}</p>}
+          </div>
+        </div>
       ) : (
         <>
           {/* Hero */}
@@ -761,18 +988,21 @@ export default function HyperFilms() {
 
           {searchResults ? (
             <div className="px-5 sm:px-10 py-6 flex flex-wrap gap-4">
-              {searchResults.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} />)}
+              {searchResults.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
               {searchResults.length === 0 && <p className="text-sm py-10" style={{ color: "#8C8A96" }}>{t.empty}</p>}
             </div>
           ) : (
             <div className="py-4 pb-16">
-              {GENRE_KEYS.map((g) => <Row key={g} genreKey={g} films={approvedFilms} lang={lang} t={t} onOpen={setOpenFilm} />)}
+              <ComingSoonRow films={approvedAll} lang={lang} t={t} />
+              <SimpleRow title={t.continue_watching} list={continueWatching} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
+              <SimpleRow title={t.top10} list={top10} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
+              {GENRE_KEYS.map((g) => <Row key={g} genreKey={g} films={approvedFilms} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
             </div>
           )}
         </>
       )}
 
-      <DetailModal film={openFilm} lang={lang} t={t} onClose={() => setOpenFilm(null)} />
+      <DetailModal film={openFilm} lang={lang} t={t} onClose={() => setOpenFilm(null)} allFilms={films} myList={myList} setMyList={setMyList} onOpen={setOpenFilm} />
     </div>
   );
 }
