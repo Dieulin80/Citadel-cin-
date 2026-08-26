@@ -629,24 +629,40 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!videoFile) { setError(t.err_file); return; }
-    setError(""); setStatus("uploading"); setProgress(15);
+    setError(""); setStatus("uploading"); setProgress(5);
 
     try {
-      const fd = new FormData();
-      fd.append("file", videoFile);
-      fd.append("title", form.title);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 segond max
-
-      const res = await fetch(
-        "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/upload-video",
-        { method: "POST", body: fd, signal: controller.signal }
+      // Etap 1: ti demand rapid — kreye antre a nan Bunny + jwenn siyati (pa gwo fichye a)
+      const createRes = await fetch(
+        "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/create-video",
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.title }) }
       );
-      clearTimeout(timeoutId);
-      setProgress(80);
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Upload echwe");
+      const created = await createRes.json();
+      if (!createRes.ok) throw new Error(created.error || "Echèk kreyasyon videyo");
+      setProgress(10);
+
+      // Etap 2: voye gwo fichye a DIRÈKTEMAN bay Bunny, ak reeseye otomatik si koneksyon an koupi
+      await new Promise((resolve, reject) => {
+        const upload = new tus.Upload(videoFile, {
+          endpoint: "https://video.bunnycdn.com/tusupload",
+          retryDelays: [0, 2000, 5000, 10000, 20000, 30000, 60000],
+          chunkSize: 5 * 1024 * 1024, // 5MB pa moso — pi bon pou koneksyon ki koupi
+          headers: {
+            AuthorizationSignature: created.signature,
+            AuthorizationExpire: String(created.expirationTime),
+            VideoId: created.videoId,
+            LibraryId: String(created.libraryId),
+          },
+          metadata: { filetype: videoFile.type, title: form.title },
+          onError: (err) => reject(err),
+          onProgress: (sent, total) => setProgress(10 + Math.round((sent / total) * 85)),
+          onSuccess: () => resolve(),
+        });
+        upload.findPreviousUploads().then((prev) => {
+          if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
+          upload.start();
+        });
+      });
 
       setProgress(100);
       setStatus("done");
@@ -656,7 +672,7 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
         desc: { ht: form.desc || "Pa gen deskripsyon.", fr: form.desc || "Pas de description.", en: form.desc || "No description." },
         submittedName: form.name,
         posterFile,
-        videoUrl: result.playbackUrl,
+        videoUrl: created.playbackUrl,
         releaseDate: form.releaseDate || null,
         seriesTitle: form.genreKey === "serie" ? form.seriesTitle || null : null,
         seasonNumber: form.genreKey === "serie" ? parseInt(form.seasonNumber, 10) || null : null,
@@ -665,8 +681,7 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
     } catch (err) {
       setStatus("idle");
       setProgress(0);
-      const msg = err.name === "AbortError" ? "Telechajman an pran twò lontan (koneksyon lan lan) — eseye ankò" : String(err.message || err) + " (eseye ankò — sa ka yon ti koupi rezo)";
-      setError(msg);
+      setError(String(err.message || err) + " — sistèm nan te eseye plizyè fwa. Tcheke koneksyon w epi eseye ankò.");
     }
   }
 
