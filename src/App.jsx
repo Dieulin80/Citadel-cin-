@@ -48,6 +48,7 @@ const T = {
     f_release: "Dat Sòti (opsyonèl — pou 'K ap Vini')", search_expand: "Chèche",
     offline_download: "Telechaje pou Gade Offline", offline_ready: "Disponib Offline ✓", offline_downloading: "K ap telechaje pou offline...",
     nav_offline: "Videyo Offline", no_offline: "Ou poko telechaje okenn videyo pou gade san entènèt.",
+    f_series_title: "Tit Seri a", f_season: "Sezon #", f_episode: "Episòd #", episodes_label: "Episòd",
   },
   fr: {
     nav_catalog: "Catalogue", nav_community: "Envoyer une vidéo", nav_staff: "Staff", nav_settings: "Paramètres",
@@ -72,6 +73,7 @@ const T = {
     f_release: "Date de sortie (optionnel — pour 'Bientôt disponible')", search_expand: "Rechercher",
     offline_download: "Télécharger pour regarder hors-ligne", offline_ready: "Disponible hors-ligne ✓", offline_downloading: "Téléchargement hors-ligne en cours...",
     nav_offline: "Vidéos hors-ligne", no_offline: "Vous n'avez encore téléchargé aucune vidéo hors-ligne.",
+    f_series_title: "Titre de la série", f_season: "Saison n°", f_episode: "Épisode n°", episodes_label: "Épisodes",
   },
   en: {
     nav_catalog: "Catalog", nav_community: "Submit a video", nav_staff: "Staff", nav_settings: "Settings",
@@ -96,6 +98,7 @@ const T = {
     f_release: "Release date (optional — for 'Coming Soon')", search_expand: "Search",
     offline_download: "Download to Watch Offline", offline_ready: "Available Offline ✓", offline_downloading: "Downloading for offline...",
     nav_offline: "Offline Videos", no_offline: "You haven't downloaded any videos for offline viewing yet.",
+    f_series_title: "Series Title", f_season: "Season #", f_episode: "Episode #", episodes_label: "Episodes",
   },
 };
 
@@ -126,6 +129,9 @@ function dbRowToFilm(row) {
     color: "#2A2A1E", featured: row.featured, status: row.status,
     posterUrl: row.poster_url || null, videoUrl: row.video_url || null,
     releaseDate: row.release_date || null,
+    seriesTitle: row.series_title || null,
+    seasonNumber: row.season_number || null,
+    episodeNumber: row.episode_number || null,
     reactionCount: row.reaction_count || 0,
     ratingSum: row.rating_sum || 0,
     ratingCount: row.rating_count || 0,
@@ -383,7 +389,29 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
   const [playing, setPlaying] = useState(false);
   const [myRating, setMyRating] = useState(() => getLocalList("hf_rated").find((r) => r.id === film?.id)?.stars || 0);
   const [offlineStatus, setOfflineStatus] = useState("idle"); // idle | downloading | ready
+  const [downloadStatus, setDownloadStatus] = useState("idle");
   const viewedRef = useRef(null);
+
+  async function handleRealDownload() {
+    if (!film.videoUrl) return;
+    setDownloadStatus("downloading");
+    try {
+      const res = await fetch(film.videoUrl);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${film.title[lang].replace(/[^a-z0-9]/gi, "_")}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      // si fetch la echwe (CORS), retonbe sou lyen dirèk la kòm sekou
+      window.open(film.videoUrl, "_blank");
+    }
+    setDownloadStatus("idle");
+  }
 
   useEffect(() => {
     if (film && getLocalList("hf_offline").includes(film.id)) setOfflineStatus("ready");
@@ -427,7 +455,13 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
     await supabase.rpc("add_film_rating", { p_film_id: film.id, p_stars: stars });
   }
 
-  const similar = (allFilms || []).filter((f) => f.genreKey === film.genreKey && f.id !== film.id && f.status === "approved" && !isUpcoming(f)).slice(0, 6);
+  const isSeries = film.genreKey === "serie" && film.seriesTitle;
+  const episodes = isSeries
+    ? (allFilms || [])
+        .filter((f) => f.seriesTitle === film.seriesTitle && f.status === "approved")
+        .sort((a, b) => (a.seasonNumber || 0) - (b.seasonNumber || 0) || (a.episodeNumber || 0) - (b.episodeNumber || 0))
+    : [];
+  const similar = isSeries ? [] : (allFilms || []).filter((f) => f.genreKey === film.genreKey && f.id !== film.id && f.status === "approved" && !isUpcoming(f)).slice(0, 6);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: "rgba(6,6,10,0.85)" }} onClick={() => { onClose(); setPlaying(false); }}>
@@ -490,16 +524,15 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
             </button>
           </div>
           {film.videoUrl && (
-            <a
-              href={film.videoUrl}
-              download
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center justify-center gap-2 mt-2 py-2.5 rounded-md text-sm"
+            <button
+              onClick={handleRealDownload}
+              disabled={downloadStatus !== "idle"}
+              className="flex items-center justify-center gap-2 mt-2 w-full py-2.5 rounded-md text-sm disabled:opacity-80"
               style={{ border: "1px solid #2A2A38", color: "#C9A15A" }}
             >
-              <UploadCloud size={15} style={{ transform: "rotate(180deg)" }} /> {t.download}
-            </a>
+              <UploadCloud size={15} style={{ transform: "rotate(180deg)" }} />
+              {downloadStatus === "downloading" ? t.uploading : t.download}
+            </button>
           )}
           {film.videoUrl && (
             <button
@@ -513,6 +546,24 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
           )}
         </div>
 
+        {episodes.length > 0 && (
+          <div className="pb-5">
+            <h4 className="px-5 mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "#8C8A96" }}>{t.episodes_label}</h4>
+            <div className="px-5 space-y-1.5 max-h-56 overflow-y-auto">
+              {episodes.map((ep) => (
+                <button
+                  key={ep.id}
+                  onClick={() => onOpen(ep)}
+                  className="flex items-center justify-between w-full text-left px-3 py-2 rounded-md text-sm"
+                  style={{ background: ep.id === film.id ? "#1D1D29" : "transparent", color: ep.id === film.id ? "#C9A15A" : "#ECE8DD", border: "1px solid #2A2A38" }}
+                >
+                  <span>S{ep.seasonNumber || "?"}E{ep.episodeNumber || "?"} — {ep.title[lang]}</span>
+                  {ep.id === film.id && <Play size={13} />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {similar.length > 0 && (
           <div className="pb-5">
             <h4 className="px-5 mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: "#8C8A96" }}>{t.similar}</h4>
@@ -564,7 +615,7 @@ function LoginGate({ lang, onLoggedIn }) {
 }
 
 function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
-  const [form, setForm] = useState({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "" });
+  const [form, setForm] = useState({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "", seriesTitle: "", seasonNumber: "", episodeNumber: "" });
   const [videoFile, setVideoFile] = useState(null);
   const [posterFile, setPosterFile] = useState(null);
   const [error, setError] = useState("");
@@ -607,6 +658,9 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
         posterFile,
         videoUrl: result.playbackUrl,
         releaseDate: form.releaseDate || null,
+        seriesTitle: form.genreKey === "serie" ? form.seriesTitle || null : null,
+        seasonNumber: form.genreKey === "serie" ? parseInt(form.seasonNumber, 10) || null : null,
+        episodeNumber: form.genreKey === "serie" ? parseInt(form.episodeNumber, 10) || null : null,
       });
     } catch (err) {
       setStatus("idle");
@@ -617,7 +671,7 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
   }
 
   function reset() {
-    setForm({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "" });
+    setForm({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "", seriesTitle: "", seasonNumber: "", episodeNumber: "" });
     setVideoFile(null); setPosterFile(null); setStatus("idle"); setProgress(0);
   }
 
@@ -678,6 +732,27 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
             </div>
+          )}
+          {form.genreKey === "serie" && (
+            <>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_series_title}</label>
+                <input value={form.seriesTitle} onChange={(e) => setForm({ ...form, seriesTitle: e.target.value })}
+                  className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_season}</label>
+                  <input type="number" min="1" value={form.seasonNumber} onChange={(e) => setForm({ ...form, seasonNumber: e.target.value })}
+                    className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
+                </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_episode}</label>
+                  <input type="number" min="1" value={form.episodeNumber} onChange={(e) => setForm({ ...form, episodeNumber: e.target.value })}
+                    className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
+                </div>
+              </div>
+            </>
           )}
           <div>
             <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_release}</label>
@@ -822,6 +897,7 @@ export default function HyperFilms() {
       genre_key: newFilm.genreKey, year: parseInt(newFilm.year, 10) || null, duration: newFilm.duration,
       status, submitted_name: newFilm.submittedName || null, created_by: staffUser?.id || null,
       poster_url, video_url: newFilm.videoUrl || null, release_date: newFilm.releaseDate || null,
+      series_title: newFilm.seriesTitle || null, season_number: newFilm.seasonNumber || null, episode_number: newFilm.episodeNumber || null,
     }).select();
     if (!error && data && data[0]) setFilms((prev) => [dbRowToFilm(data[0]), ...prev]);
   }
