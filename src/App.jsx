@@ -525,17 +525,6 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
           </div>
           {film.videoUrl && (
             <button
-              onClick={handleRealDownload}
-              disabled={downloadStatus !== "idle"}
-              className="flex items-center justify-center gap-2 mt-2 w-full py-2.5 rounded-md text-sm disabled:opacity-80"
-              style={{ border: "1px solid #2A2A38", color: "#C9A15A" }}
-            >
-              <UploadCloud size={15} style={{ transform: "rotate(180deg)" }} />
-              {downloadStatus === "downloading" ? t.uploading : t.download}
-            </button>
-          )}
-          {film.videoUrl && (
-            <button
               onClick={handleOfflineDownload}
               disabled={offlineStatus !== "idle"}
               className="flex items-center justify-center gap-2 mt-2 w-full py-2.5 rounded-md text-sm disabled:opacity-80"
@@ -634,7 +623,7 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
     try {
       // Etap 1: ti demand rapid — kreye antre a nan Bunny + jwenn siyati (pa gwo fichye a)
       const createRes = await fetch(
-        "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/create-video",
+        "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/clever-api",
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.title }) }
       );
       const created = await createRes.json();
