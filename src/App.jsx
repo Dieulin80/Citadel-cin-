@@ -653,9 +653,7 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
         });
       });
 
-      setProgress(100);
-      setStatus("done");
-      onSubmitFilm({
+      const insertResult = await onSubmitFilm({
         genreKey: form.genreKey, year: form.year, duration: form.duration || "—",
         title: { ht: form.title, fr: form.title, en: form.title },
         desc: { ht: form.desc || "Pa gen deskripsyon.", fr: form.desc || "Pas de description.", en: form.desc || "No description." },
@@ -667,6 +665,13 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
         seasonNumber: form.genreKey === "serie" ? parseInt(form.seasonNumber, 10) || null : null,
         episodeNumber: form.genreKey === "serie" ? parseInt(form.episodeNumber, 10) || null : null,
       });
+
+      if (insertResult && insertResult.ok === false) {
+        throw new Error("Videyo a telechaje nan Bunny men li pa t ka anrejistre nan baz done a: " + insertResult.error);
+      }
+
+      setProgress(100);
+      setStatus("done");
     } catch (err) {
       setStatus("idle");
       setProgress(0);
@@ -903,7 +908,11 @@ export default function HyperFilms() {
       poster_url, video_url: newFilm.videoUrl || null, release_date: newFilm.releaseDate || null,
       series_title: newFilm.seriesTitle || null, season_number: newFilm.seasonNumber || null, episode_number: newFilm.episodeNumber || null,
     }).select();
-    if (!error && data && data[0]) setFilms((prev) => [dbRowToFilm(data[0]), ...prev]);
+    if (error) {
+      return { ok: false, error: error.message || String(error) };
+    }
+    if (data && data[0]) setFilms((prev) => [dbRowToFilm(data[0]), ...prev]);
+    return { ok: true };
   }
 
   async function handleApprove(id) {
