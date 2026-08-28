@@ -49,6 +49,7 @@ const T = {
     offline_download: "Telechaje pou Gade Offline", offline_ready: "Disponib Offline ✓", offline_downloading: "K ap telechaje pou offline...",
     nav_offline: "Videyo Offline", no_offline: "Ou poko telechaje okenn videyo pou gade san entènèt.",
     f_series_title: "Tit Seri a", f_season: "Sezon #", f_episode: "Episòd #", episodes_label: "Episòd",
+    manage_films: "Jere Fim", change_poster: "Chanje Poster", poster_updated: "Poster mete ajou!",
   },
   fr: {
     nav_catalog: "Catalogue", nav_community: "Envoyer une vidéo", nav_staff: "Staff", nav_settings: "Paramètres",
@@ -74,6 +75,7 @@ const T = {
     offline_download: "Télécharger pour regarder hors-ligne", offline_ready: "Disponible hors-ligne ✓", offline_downloading: "Téléchargement hors-ligne en cours...",
     nav_offline: "Vidéos hors-ligne", no_offline: "Vous n'avez encore téléchargé aucune vidéo hors-ligne.",
     f_series_title: "Titre de la série", f_season: "Saison n°", f_episode: "Épisode n°", episodes_label: "Épisodes",
+    manage_films: "Gérer les Films", change_poster: "Changer l'affiche", poster_updated: "Affiche mise à jour !",
   },
   en: {
     nav_catalog: "Catalog", nav_community: "Submit a video", nav_staff: "Staff", nav_settings: "Settings",
@@ -99,6 +101,7 @@ const T = {
     offline_download: "Download to Watch Offline", offline_ready: "Available Offline ✓", offline_downloading: "Downloading for offline...",
     nav_offline: "Offline Videos", no_offline: "You haven't downloaded any videos for offline viewing yet.",
     f_series_title: "Series Title", f_season: "Season #", f_episode: "Episode #", episodes_label: "Episodes",
+    manage_films: "Manage Films", change_poster: "Change Poster", poster_updated: "Poster updated!",
   },
 };
 
@@ -669,6 +672,9 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
       if (insertResult && insertResult.ok === false) {
         throw new Error("Videyo a telechaje nan Bunny men li pa t ka anrejistre nan baz done a: " + insertResult.error);
       }
+      if (insertResult && insertResult.posterWarning) {
+        setError("Fim lan ajoute, men imaj (poster) la pa t ka telechaje: " + insertResult.posterWarning + " — tcheke si bucket 'site-assets' la se 'Public' sou Supabase.");
+      }
 
       setProgress(100);
       setStatus("done");
@@ -681,7 +687,7 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
 
   function reset() {
     setForm({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "", seriesTitle: "", seasonNumber: "", episodeNumber: "" });
-    setVideoFile(null); setPosterFile(null); setStatus("idle"); setProgress(0);
+    setVideoFile(null); setPosterFile(null); setStatus("idle"); setProgress(0); setError("");
   }
 
   return (
@@ -702,6 +708,7 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
             {isStaff ? t.done_title : t.done_title_com}
           </p>
           <p className="text-sm mt-1" style={{ color: "#8C8A96" }}>{form.title}</p>
+          {error && <p className="text-sm mt-2" style={{ color: "#D9A05B" }}>{error}</p>}
           <button onClick={reset} className="mt-4 text-sm px-4 py-2 rounded-md" style={{ border: "1px solid #2A2A38", color: "#ECE8DD" }}>{t.add_another}</button>
         </div>
       ) : (
@@ -866,6 +873,57 @@ function PendingView({ t, lang, films, onApprove }) {
   );
 }
 
+function ManageFilmRow({ film, lang, t, onUpdatePoster }) {
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSaving(true);
+    setDone(false);
+    await onUpdatePoster(film.id, file);
+    setSaving(false);
+    setDone(true);
+    setTimeout(() => setDone(false), 2000);
+  }
+
+  return (
+    <div className="flex items-center justify-between p-3 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+      <div className="flex items-center gap-3">
+        <div
+          className="w-10 h-14 rounded shrink-0"
+          style={
+            film.posterUrl
+              ? { backgroundImage: `url(${film.posterUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+              : { background: film.color }
+          }
+        />
+        <div>
+          <p style={{ color: "#ECE8DD", fontWeight: 600 }}>{film.title[lang]}</p>
+          <p className="text-xs" style={{ color: "#8C8A96" }}>{t.genre[film.genreKey]} · {film.year} · {film.status}</p>
+        </div>
+      </div>
+      <label className="px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer shrink-0" style={{ background: done ? "#1E3028" : "#C9A15A", color: done ? "#7BB88A" : "#0A0A10" }}>
+        {saving ? "..." : done ? t.poster_updated : t.change_poster}
+        <input type="file" accept="image/*" className="hidden" onChange={handleFile} disabled={saving} />
+      </label>
+    </div>
+  );
+}
+
+function ManageFilmsView({ t, lang, films, onUpdatePoster }) {
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-10">
+      <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.manage_films}</h2>
+      <div className="mt-5 space-y-3">
+        {films.map((f) => <ManageFilmRow key={f.id} film={f} lang={lang} t={t} onUpdatePoster={onUpdatePoster} />)}
+      </div>
+    </div>
+  );
+}
+
+
 export default function HyperFilms() {
   const [view, setView] = useState("catalog");
   const [lang, setLang] = useState("fr");
@@ -895,10 +953,15 @@ export default function HyperFilms() {
 
   async function insertFilm(newFilm, status) {
     let poster_url = null;
+    let posterUploadError = null;
     if (newFilm.posterFile) {
       const path = `posters/${Date.now()}-${newFilm.posterFile.name}`;
       const { error: upErr } = await supabase.storage.from("site-assets").upload(path, newFilm.posterFile, { upsert: true });
-      if (!upErr) poster_url = supabase.storage.from("site-assets").getPublicUrl(path).data.publicUrl;
+      if (!upErr) {
+        poster_url = supabase.storage.from("site-assets").getPublicUrl(path).data.publicUrl;
+      } else {
+        posterUploadError = upErr.message || String(upErr);
+      }
     }
     const { data, error } = await supabase.from("films").insert({
       title_ht: newFilm.title.ht, title_fr: newFilm.title.fr, title_en: newFilm.title.en,
@@ -912,12 +975,21 @@ export default function HyperFilms() {
       return { ok: false, error: error.message || String(error) };
     }
     if (data && data[0]) setFilms((prev) => [dbRowToFilm(data[0]), ...prev]);
-    return { ok: true };
+    return { ok: true, posterWarning: posterUploadError };
   }
 
   async function handleApprove(id) {
     const { error } = await supabase.from("films").update({ status: "approved" }).eq("id", id);
     if (!error) setFilms((prev) => prev.map((f) => (f.id === id ? { ...f, status: "approved" } : f)));
+  }
+
+  async function handleUpdatePoster(filmId, file) {
+    const path = `posters/${Date.now()}-${file.name}`;
+    const { error: upErr } = await supabase.storage.from("site-assets").upload(path, file, { upsert: true });
+    if (upErr) return;
+    const poster_url = supabase.storage.from("site-assets").getPublicUrl(path).data.publicUrl;
+    const { error } = await supabase.from("films").update({ poster_url }).eq("id", filmId);
+    if (!error) setFilms((prev) => prev.map((f) => (f.id === filmId ? { ...f, posterUrl: poster_url } : f)));
   }
 
   async function handleSaveSettings({ logoFile, bgFile }) {
@@ -1057,6 +1129,7 @@ export default function HyperFilms() {
                   <>
                     <button onClick={() => { setView("upload"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.nav_staff}: {t.submit}</button>
                     <button onClick={() => { setView("pending"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.pending_title}</button>
+                    <button onClick={() => { setView("manage"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.manage_films}</button>
                     <button onClick={() => { setView("settings"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.nav_settings}</button>
                     <button onClick={handleLogout} className="flex items-center gap-1.5 w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#8C8A96" }}><LogOut size={13} /> Logout</button>
                   </>
@@ -1090,6 +1163,8 @@ export default function HyperFilms() {
         <SettingsView t={t} settings={settings} onSave={handleSaveSettings} />
       ) : view === "pending" && staffUser ? (
         <PendingView t={t} lang={lang} films={films} onApprove={handleApprove} />
+      ) : view === "manage" && staffUser ? (
+        <ManageFilmsView t={t} lang={lang} films={films} onUpdatePoster={handleUpdatePoster} />
       ) : view === "mylist" ? (
         <div className="px-5 sm:px-10 py-10">
           <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.my_list}</h2>
