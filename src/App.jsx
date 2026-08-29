@@ -606,88 +606,35 @@ function LoginGate({ lang, onLoggedIn }) {
   );
 }
 
-function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
+function UploadForm({ lang, t, isStaff, onQueueUpload }) {
   const [form, setForm] = useState({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "", seriesTitle: "", seasonNumber: "", episodeNumber: "" });
-  const [videoFile, setVideoFile] = useState(null);
+  const [videoFiles, setVideoFiles] = useState([]); // toujou yon lis, menm pou yon sèl fim
   const [posterFile, setPosterFile] = useState(null);
   const [error, setError] = useState("");
-  const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState("idle");
-  const canSubmit = form.title && form.year && videoFile && status === "idle";
+  const [justQueued, setJustQueued] = useState(false);
+  const isSerie = form.genreKey === "serie";
+  const canSubmit = form.title && form.year && videoFiles.length > 0;
 
-  function handleFile(e) { const f = e.target.files?.[0]; if (f) setVideoFile(f); }
+  function handleFile(e) {
+    const files = Array.from(e.target.files || []);
+    if (files.length) setVideoFiles(isSerie ? files : [files[0]]);
+  }
   function handlePoster(e) { const f = e.target.files?.[0]; if (f) setPosterFile(f); }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
-    if (!videoFile) { setError(t.err_file); return; }
-    setError(""); setStatus("uploading"); setProgress(5);
-
-    try {
-      // Etap 1: ti demand rapid — kreye antre a nan Bunny + jwenn siyati (pa gwo fichye a)
-      const createRes = await fetch(
-        "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/clever-api",
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: form.title }) }
-      );
-      const created = await createRes.json();
-      if (!createRes.ok) throw new Error(created.error || "Echèk kreyasyon videyo");
-      setProgress(10);
-
-      // Etap 2: voye gwo fichye a DIRÈKTEMAN bay Bunny, ak reeseye otomatik si koneksyon an koupi
-      await new Promise((resolve, reject) => {
-        const upload = new tus.Upload(videoFile, {
-          endpoint: "https://video.bunnycdn.com/tusupload",
-          retryDelays: [0, 2000, 5000, 10000, 20000, 30000, 60000],
-          chunkSize: 5 * 1024 * 1024, // 5MB pa moso — pi bon pou koneksyon ki koupi
-          headers: {
-            AuthorizationSignature: created.signature,
-            AuthorizationExpire: String(created.expirationTime),
-            VideoId: created.videoId,
-            LibraryId: String(created.libraryId),
-          },
-          metadata: { filetype: videoFile.type, title: form.title },
-          onError: (err) => reject(err),
-          onProgress: (sent, total) => setProgress(10 + Math.round((sent / total) * 85)),
-          onSuccess: () => resolve(),
-        });
-        upload.findPreviousUploads().then((prev) => {
-          if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
-          upload.start();
-        });
-      });
-
-      const insertResult = await onSubmitFilm({
-        genreKey: form.genreKey, year: form.year, duration: form.duration || "—",
-        title: { ht: form.title, fr: form.title, en: form.title },
-        desc: { ht: form.desc || "Pa gen deskripsyon.", fr: form.desc || "Pas de description.", en: form.desc || "No description." },
-        submittedName: form.name,
-        posterFile,
-        videoUrl: created.playbackUrl,
-        releaseDate: form.releaseDate || null,
-        seriesTitle: form.genreKey === "serie" ? form.seriesTitle || null : null,
-        seasonNumber: form.genreKey === "serie" ? parseInt(form.seasonNumber, 10) || null : null,
-        episodeNumber: form.genreKey === "serie" ? parseInt(form.episodeNumber, 10) || null : null,
-      });
-
-      if (insertResult && insertResult.ok === false) {
-        throw new Error("Videyo a telechaje nan Bunny men li pa t ka anrejistre nan baz done a: " + insertResult.error);
-      }
-      if (insertResult && insertResult.posterWarning) {
-        setError("Fim lan ajoute, men imaj (poster) la pa t ka telechaje: " + insertResult.posterWarning + " — tcheke si bucket 'site-assets' la se 'Public' sou Supabase.");
-      }
-
-      setProgress(100);
-      setStatus("done");
-    } catch (err) {
-      setStatus("idle");
-      setProgress(0);
-      setError(String(err.message || err) + " — sistèm nan te eseye plizyè fwa. Tcheke koneksyon w epi eseye ankò.");
-    }
+    if (videoFiles.length === 0) { setError(t.err_file); return; }
+    setError("");
+    // Kòmanse telechajman an "an background" — pa tann li fini
+    onQueueUpload({ ...form, isStaff, isSerie }, videoFiles, posterFile);
+    reset();
+    setJustQueued(true);
+    setTimeout(() => setJustQueued(false), 4000);
   }
 
   function reset() {
     setForm({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "", seriesTitle: "", seasonNumber: "", episodeNumber: "" });
-    setVideoFile(null); setPosterFile(null); setStatus("idle"); setProgress(0); setError("");
+    setVideoFiles([]); setPosterFile(null); setError("");
   }
 
   return (
@@ -699,20 +646,13 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
         {isStaff ? t.up_sub : t.com_sub}
       </p>
 
-      {status === "done" ? (
-        <div className="rounded-md p-6 text-center" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
-          <div className="w-10 h-10 rounded-full mx-auto flex items-center justify-center mb-3" style={{ background: "#1E3028" }}>
-            <Check size={20} style={{ color: "#7BB88A" }} />
-          </div>
-          <p style={{ color: "#ECE8DD", fontFamily: "'Work Sans', sans-serif", fontWeight: 600 }}>
-            {isStaff ? t.done_title : t.done_title_com}
-          </p>
-          <p className="text-sm mt-1" style={{ color: "#8C8A96" }}>{form.title}</p>
-          {error && <p className="text-sm mt-2" style={{ color: "#D9A05B" }}>{error}</p>}
-          <button onClick={reset} className="mt-4 text-sm px-4 py-2 rounded-md" style={{ border: "1px solid #2A2A38", color: "#ECE8DD" }}>{t.add_another}</button>
+      {justQueued && (
+        <div className="rounded-md p-4 mb-4 flex items-center gap-2" style={{ background: "#1E3028", border: "1px solid #2E4A38" }}>
+          <Check size={16} style={{ color: "#7BB88A" }} />
+          <p className="text-sm" style={{ color: "#ECE8DD" }}>Telechajman kòmanse an background — swiv pwogrè a nan ti bare anba ekran an. Ou ka poste yon lòt videyo kounye a.</p>
         </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
+      )}
+      <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_title}</label>
             <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -787,24 +727,18 @@ function UploadForm({ lang, t, isStaff, onSubmitFilm }) {
             <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_video}</label>
             <label className="flex flex-col items-center justify-center gap-2 py-6 rounded-md text-sm cursor-pointer" style={{ border: "1.5px dashed #2A2A38", color: "#8C8A96" }}>
               <UploadCloud size={20} style={{ color: "#C9A15A" }} />
-              {videoFile ? videoFile.name : t.f_video_ph}
-              <input type="file" accept="video/*" className="hidden" onChange={handleFile} />
+              {videoFiles.length > 0
+                ? (isSerie ? `${videoFiles.length} fichye chwazi (Episòd ${form.episodeNumber || 1} → ${(parseInt(form.episodeNumber, 10) || 1) + videoFiles.length - 1})` : videoFiles[0].name)
+                : t.f_video_ph}
+              <input type="file" accept="video/*" multiple={isSerie} className="hidden" onChange={handleFile} />
             </label>
+            {isSerie && <p className="text-[11px] mt-1" style={{ color: "#8C8A96" }}>Chwazi plizyè fichye an menm tan pou yo vin episòd youn apre lòt, kòmanse ak nimewo "{t.f_episode}" anwo a.</p>}
           </div>
-          {status === "uploading" && (
-            <div>
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#1D1D29" }}>
-                <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: "#C9A15A" }} />
-              </div>
-              <p className="text-[11px] mt-1" style={{ color: "#8C8A96" }}>{t.uploading} {Math.round(progress)}%</p>
-            </div>
-          )}
           {error && <p className="text-sm" style={{ color: "#D98080" }}>{error}</p>}
-          <button type="submit" disabled={!canSubmit && status !== "uploading"} className="w-full py-2.5 rounded-md text-sm font-semibold disabled:opacity-40" style={{ background: "#C9A15A", color: "#0A0A10" }}>
-            {status === "uploading" ? t.uploading : (isStaff ? t.submit : t.submit_com)}
+          <button type="submit" disabled={!canSubmit} className="w-full py-2.5 rounded-md text-sm font-semibold disabled:opacity-40" style={{ background: "#C9A15A", color: "#0A0A10" }}>
+            {isStaff ? t.submit : t.submit_com}
           </button>
-        </form>
-      )}
+      </form>
     </div>
   );
 }
@@ -945,6 +879,7 @@ export default function HyperFilms() {
   const [settings, setSettings] = useState({ logo_url: "", background_url: "" });
   const [myList, setMyList] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [uploadQueue, setUploadQueue] = useState([]); // {id, label, progress, statusText: 'uploading'|'done'|'error', error}
 
   useEffect(() => {
     setMyList(getLocalList("hf_my_list"));
@@ -985,6 +920,87 @@ export default function HyperFilms() {
     }
     if (data && data[0]) setFilms((prev) => [dbRowToFilm(data[0]), ...prev]);
     return { ok: true, posterWarning: posterUploadError };
+  }
+
+  function updateQueueItem(id, patch) {
+    setUploadQueue((prev) => prev.map((q) => (q.id === id ? { ...q, ...patch } : q)));
+  }
+
+  async function uploadSingleFile(queueId, file, title) {
+    const createRes = await fetch(
+      "https://hsbifpngubxfkmypkjxn.supabase.co/functions/v1/clever-api",
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) }
+    );
+    const created = await createRes.json();
+    if (!createRes.ok) throw new Error(created.error || "Echèk kreyasyon videyo");
+
+    await new Promise((resolve, reject) => {
+      const upload = new tus.Upload(file, {
+        endpoint: "https://video.bunnycdn.com/tusupload",
+        retryDelays: [0, 2000, 5000, 10000, 20000, 30000, 60000],
+        chunkSize: 5 * 1024 * 1024,
+        headers: {
+          AuthorizationSignature: created.signature,
+          AuthorizationExpire: String(created.expirationTime),
+          VideoId: created.videoId,
+          LibraryId: String(created.libraryId),
+        },
+        metadata: { filetype: file.type, title },
+        onError: (err) => reject(err),
+        onProgress: (sent, total) => updateQueueItem(queueId, { progress: Math.round((sent / total) * 100) }),
+        onSuccess: () => resolve(),
+      });
+      upload.findPreviousUploads().then((prev) => {
+        if (prev.length) upload.resumeFromPreviousUpload(prev[0]);
+        upload.start();
+      });
+    });
+
+    return created.playbackUrl;
+  }
+
+  async function queueUpload(formSnapshot, videoFiles, posterFile) {
+    const { isStaff, isSerie } = formSnapshot;
+    const startEpisode = parseInt(formSnapshot.episodeNumber, 10) || 1;
+
+    for (let i = 0; i < videoFiles.length; i++) {
+      const queueId = `${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`;
+      const episodeNum = isSerie ? startEpisode + i : null;
+      const epTitle = isSerie ? `${formSnapshot.title} S${formSnapshot.seasonNumber || "1"}E${episodeNum}` : formSnapshot.title;
+      const label = isSerie ? `${formSnapshot.title} — Ep ${episodeNum}` : formSnapshot.title;
+
+      setUploadQueue((prev) => [...prev, { id: queueId, label, progress: 0, statusText: "uploading", error: null }]);
+
+      try {
+        const playbackUrl = await uploadSingleFile(queueId, videoFiles[i], epTitle);
+        const insertResult = await insertFilm(
+          {
+            genreKey: formSnapshot.genreKey, year: formSnapshot.year, duration: formSnapshot.duration || "—",
+            title: { ht: formSnapshot.title, fr: formSnapshot.title, en: formSnapshot.title },
+            desc: {
+              ht: formSnapshot.desc || "Pa gen deskripsyon.",
+              fr: formSnapshot.desc || "Pas de description.",
+              en: formSnapshot.desc || "No description.",
+            },
+            submittedName: formSnapshot.name,
+            posterFile: i === 0 ? posterFile : null,
+            videoUrl: playbackUrl,
+            releaseDate: formSnapshot.releaseDate || null,
+            seriesTitle: isSerie ? formSnapshot.seriesTitle || formSnapshot.title : null,
+            seasonNumber: isSerie ? parseInt(formSnapshot.seasonNumber, 10) || null : null,
+            episodeNumber: episodeNum,
+          },
+          isStaff ? "approved" : "pending"
+        );
+
+        if (insertResult && insertResult.ok === false) throw new Error(insertResult.error);
+
+        updateQueueItem(queueId, { statusText: "done", progress: 100 });
+        setTimeout(() => setUploadQueue((prev) => prev.filter((q) => q.id !== queueId)), 5000);
+      } catch (err) {
+        updateQueueItem(queueId, { statusText: "error", error: String(err.message || err) });
+      }
+    }
   }
 
   async function handleApprove(id) {
@@ -1167,9 +1183,9 @@ export default function HyperFilms() {
       {(view === "catalog") && <GenreNav t={t} onSelect={scrollToGenre} />}
 
       {view === "upload" ? (
-        staffUser ? <UploadForm lang={lang} t={t} isStaff={true} onSubmitFilm={(f) => insertFilm(f, "approved")} /> : <LoginGate lang={lang} onLoggedIn={setStaffUser} />
+        staffUser ? <UploadForm lang={lang} t={t} isStaff={true} onQueueUpload={queueUpload} /> : <LoginGate lang={lang} onLoggedIn={setStaffUser} />
       ) : view === "community" ? (
-        <UploadForm lang={lang} t={t} isStaff={false} onSubmitFilm={(f) => insertFilm(f, "pending")} />
+        <UploadForm lang={lang} t={t} isStaff={false} onQueueUpload={queueUpload} />
       ) : view === "settings" && staffUser ? (
         <SettingsView t={t} settings={settings} onSave={handleSaveSettings} />
       ) : view === "pending" && staffUser ? (
@@ -1237,6 +1253,29 @@ export default function HyperFilms() {
       )}
 
       <DetailModal film={openFilm} lang={lang} t={t} onClose={() => setOpenFilm(null)} allFilms={films} myList={myList} setMyList={setMyList} onOpen={setOpenFilm} />
+
+      {uploadQueue.length > 0 && (
+        <div className="fixed bottom-3 right-3 left-3 sm:left-auto sm:w-80 z-50 space-y-2">
+          {uploadQueue.map((q) => (
+            <div key={q.id} className="rounded-md p-3 shadow-lg" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs truncate pr-2" style={{ color: "#ECE8DD", fontWeight: 600 }}>{q.label}</p>
+                {q.statusText === "done" && <Check size={14} style={{ color: "#7BB88A" }} />}
+              </div>
+              {q.statusText === "error" ? (
+                <p className="text-[11px]" style={{ color: "#D98080" }}>{q.error}</p>
+              ) : (
+                <>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#1D1D29" }}>
+                    <div className="h-full rounded-full transition-all" style={{ width: `${q.progress}%`, background: q.statusText === "done" ? "#7BB88A" : "#C9A15A" }} />
+                  </div>
+                  <p className="text-[10px] mt-1" style={{ color: "#8C8A96" }}>{q.statusText === "done" ? "Fini!" : `${q.progress}%`}</p>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
