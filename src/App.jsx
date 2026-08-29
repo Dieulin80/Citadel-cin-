@@ -876,38 +876,47 @@ function PendingView({ t, lang, films, onApprove }) {
 function ManageFilmRow({ film, lang, t, onUpdatePoster }) {
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
+  const [rowError, setRowError] = useState("");
 
   async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     setSaving(true);
     setDone(false);
-    await onUpdatePoster(film.id, file);
+    setRowError("");
+    const result = await onUpdatePoster(film.id, file);
     setSaving(false);
-    setDone(true);
-    setTimeout(() => setDone(false), 2000);
+    if (result && result.ok) {
+      setDone(true);
+      setTimeout(() => setDone(false), 2000);
+    } else {
+      setRowError((result && result.error) || "Echèk telechajman");
+    }
   }
 
   return (
-    <div className="flex items-center justify-between p-3 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
-      <div className="flex items-center gap-3">
-        <div
-          className="w-10 h-14 rounded shrink-0"
-          style={
-            film.posterUrl
-              ? { backgroundImage: `url(${film.posterUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-              : { background: film.color }
-          }
-        />
-        <div>
-          <p style={{ color: "#ECE8DD", fontWeight: 600 }}>{film.title[lang]}</p>
-          <p className="text-xs" style={{ color: "#8C8A96" }}>{t.genre[film.genreKey]} · {film.year} · {film.status}</p>
+    <div className="flex flex-col gap-1.5 p-3 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-10 h-14 rounded shrink-0"
+            style={
+              film.posterUrl
+                ? { backgroundImage: `url(${film.posterUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+                : { background: film.color }
+            }
+          />
+          <div>
+            <p style={{ color: "#ECE8DD", fontWeight: 600 }}>{film.title[lang]}</p>
+            <p className="text-xs" style={{ color: "#8C8A96" }}>{t.genre[film.genreKey]} · {film.year} · {film.status}</p>
+          </div>
         </div>
+        <label className="px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer shrink-0" style={{ background: done ? "#1E3028" : "#C9A15A", color: done ? "#7BB88A" : "#0A0A10" }}>
+          {saving ? "..." : done ? t.poster_updated : t.change_poster}
+          <input type="file" accept="image/*" className="hidden" onChange={handleFile} disabled={saving} />
+        </label>
       </div>
-      <label className="px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer shrink-0" style={{ background: done ? "#1E3028" : "#C9A15A", color: done ? "#7BB88A" : "#0A0A10" }}>
-        {saving ? "..." : done ? t.poster_updated : t.change_poster}
-        <input type="file" accept="image/*" className="hidden" onChange={handleFile} disabled={saving} />
-      </label>
+      {rowError && <p className="text-xs" style={{ color: "#D98080" }}>{rowError}</p>}
     </div>
   );
 }
@@ -986,10 +995,12 @@ export default function HyperFilms() {
   async function handleUpdatePoster(filmId, file) {
     const path = `posters/${Date.now()}-${file.name}`;
     const { error: upErr } = await supabase.storage.from("site-assets").upload(path, file, { upsert: true });
-    if (upErr) return;
+    if (upErr) return { ok: false, error: upErr.message || String(upErr) };
     const poster_url = supabase.storage.from("site-assets").getPublicUrl(path).data.publicUrl;
     const { error } = await supabase.from("films").update({ poster_url }).eq("id", filmId);
-    if (!error) setFilms((prev) => prev.map((f) => (f.id === filmId ? { ...f, posterUrl: poster_url } : f)));
+    if (error) return { ok: false, error: error.message || String(error) };
+    setFilms((prev) => prev.map((f) => (f.id === filmId ? { ...f, posterUrl: poster_url } : f)));
+    return { ok: true };
   }
 
   async function handleSaveSettings({ logoFile, bgFile }) {
