@@ -50,6 +50,8 @@ const T = {
     nav_offline: "Videyo Offline", no_offline: "Ou poko telechaje okenn videyo pou gade san entènèt.",
     f_series_title: "Tit Seri a", f_season: "Sezon #", f_episode: "Episòd #", episodes_label: "Episòd",
     manage_films: "Jere Fim", change_poster: "Chanje Poster", poster_updated: "Poster mete ajou!",
+    stats_title: "ESTATISTIK SIT LA", total_views: "Total vizit paj", unique_visitors: "Moun diferan ki vizite",
+    top_films_views: "Fim ki pi gade yo",
   },
   fr: {
     nav_catalog: "Catalogue", nav_community: "Envoyer une vidéo", nav_staff: "Staff", nav_settings: "Paramètres",
@@ -76,6 +78,8 @@ const T = {
     nav_offline: "Vidéos hors-ligne", no_offline: "Vous n'avez encore téléchargé aucune vidéo hors-ligne.",
     f_series_title: "Titre de la série", f_season: "Saison n°", f_episode: "Épisode n°", episodes_label: "Épisodes",
     manage_films: "Gérer les Films", change_poster: "Changer l'affiche", poster_updated: "Affiche mise à jour !",
+    stats_title: "STATISTIQUES DU SITE", total_views: "Total de vues", unique_visitors: "Visiteurs uniques",
+    top_films_views: "Films les plus regardés",
   },
   en: {
     nav_catalog: "Catalog", nav_community: "Submit a video", nav_staff: "Staff", nav_settings: "Settings",
@@ -102,6 +106,8 @@ const T = {
     nav_offline: "Offline Videos", no_offline: "You haven't downloaded any videos for offline viewing yet.",
     f_series_title: "Series Title", f_season: "Season #", f_episode: "Episode #", episodes_label: "Episodes",
     manage_films: "Manage Films", change_poster: "Change Poster", poster_updated: "Poster updated!",
+    stats_title: "SITE STATISTICS", total_views: "Total page views", unique_visitors: "Unique visitors",
+    top_films_views: "Most watched films",
   },
 };
 
@@ -615,9 +621,16 @@ function UploadForm({ lang, t, isStaff, onQueueUpload }) {
   const isSerie = form.genreKey === "serie";
   const canSubmit = form.title && form.year && videoFiles.length > 0;
 
+  function naturalSort(a, b) {
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  }
+
   function handleFile(e) {
     const files = Array.from(e.target.files || []);
-    if (files.length) setVideoFiles(isSerie ? files : [files[0]]);
+    if (files.length) {
+      const ordered = isSerie ? [...files].sort(naturalSort) : files;
+      setVideoFiles(isSerie ? ordered : [ordered[0]]);
+    }
   }
   function handlePoster(e) { const f = e.target.files?.[0]; if (f) setPosterFile(f); }
 
@@ -732,7 +745,30 @@ function UploadForm({ lang, t, isStaff, onQueueUpload }) {
                 : t.f_video_ph}
               <input type="file" accept="video/*" multiple={isSerie} className="hidden" onChange={handleFile} />
             </label>
-            {isSerie && <p className="text-[11px] mt-1" style={{ color: "#8C8A96" }}>Chwazi plizyè fichye an menm tan pou yo vin episòd youn apre lòt, kòmanse ak nimewo "{t.f_episode}" anwo a.</p>}
+            {isSerie && <p className="text-[11px] mt-1" style={{ color: "#8C8A96" }}>Chwazi plizyè fichye an menm tan pou yo vin episòd youn apre lòt, kòmanse ak nimewo "{t.f_episode}" anwo a. Yo klase otomatikman selon non fichye a — verifye lòd la anba a.</p>}
+            {isSerie && videoFiles.length > 1 && (
+              <div className="mt-2 space-y-1 max-h-48 overflow-y-auto">
+                {videoFiles.map((f, idx) => (
+                  <div key={f.name + idx} className="flex items-center justify-between px-2.5 py-1.5 rounded text-xs" style={{ background: "#1D1D29", color: "#ECE8DD" }}>
+                    <span className="truncate pr-2">Ep {(parseInt(form.episodeNumber, 10) || 1) + idx} — {f.name}</span>
+                    <span className="flex gap-1 shrink-0">
+                      <button type="button" onClick={() => {
+                        if (idx === 0) return;
+                        const arr = [...videoFiles];
+                        [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                        setVideoFiles(arr);
+                      }} style={{ color: "#8C8A96" }}>↑</button>
+                      <button type="button" onClick={() => {
+                        if (idx === videoFiles.length - 1) return;
+                        const arr = [...videoFiles];
+                        [arr[idx + 1], arr[idx]] = [arr[idx], arr[idx + 1]];
+                        setVideoFiles(arr);
+                      }} style={{ color: "#8C8A96" }}>↓</button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           {error && <p className="text-sm" style={{ color: "#D98080" }}>{error}</p>}
           <button type="submit" disabled={!canSubmit} className="w-full py-2.5 rounded-md text-sm font-semibold disabled:opacity-40" style={{ background: "#C9A15A", color: "#0A0A10" }}>
@@ -866,6 +902,40 @@ function ManageFilmsView({ t, lang, films, onUpdatePoster }) {
   );
 }
 
+function StatsView({ t, lang, films, siteStats }) {
+  const topFilms = [...films]
+    .filter((f) => f.status === "approved")
+    .sort((a, b) => b.viewCount - a.viewCount)
+    .slice(0, 10);
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-10">
+      <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.stats_title}</h2>
+      <div className="grid grid-cols-2 gap-3 mt-5">
+        <div className="p-4 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+          <p className="text-2xl" style={{ color: "#C9A15A", fontFamily: "'Anton', sans-serif" }}>{siteStats.total_views ?? 0}</p>
+          <p className="text-xs mt-1" style={{ color: "#8C8A96" }}>{t.total_views}</p>
+        </div>
+        <div className="p-4 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+          <p className="text-2xl" style={{ color: "#C9A15A", fontFamily: "'Anton', sans-serif" }}>{siteStats.unique_visitors ?? 0}</p>
+          <p className="text-xs mt-1" style={{ color: "#8C8A96" }}>{t.unique_visitors}</p>
+        </div>
+      </div>
+
+      <h3 className="text-sm font-semibold mt-8 mb-3" style={{ color: "#ECE8DD" }}>{t.top_films_views}</h3>
+      <div className="space-y-2">
+        {topFilms.map((f, i) => (
+          <div key={f.id} className="flex items-center justify-between p-2.5 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+            <span className="text-sm" style={{ color: "#ECE8DD" }}>{i + 1}. {f.title[lang]}</span>
+            <span className="text-xs" style={{ color: "#C9A15A" }}>{f.viewCount} vi</span>
+          </div>
+        ))}
+        {topFilms.length === 0 && <p className="text-sm" style={{ color: "#8C8A96" }}>{t.empty}</p>}
+      </div>
+    </div>
+  );
+}
+
 
 export default function HyperFilms() {
   const [view, setView] = useState("catalog");
@@ -880,6 +950,7 @@ export default function HyperFilms() {
   const [myList, setMyList] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [uploadQueue, setUploadQueue] = useState([]); // {id, label, progress, statusText: 'uploading'|'done'|'error', error}
+  const [siteStats, setSiteStats] = useState({ total_views: 0, unique_visitors: 0 });
 
   useEffect(() => {
     setMyList(getLocalList("hf_my_list"));
@@ -893,6 +964,16 @@ export default function HyperFilms() {
     supabase.from("site_settings").select("*").eq("id", 1).single().then(({ data }) => {
       if (data) setSettings(data);
     });
+    supabase.from("site_stats").select("*").eq("id", 1).single().then(({ data }) => {
+      if (data) setSiteStats(data);
+    });
+
+    // Konte vizit la (chak paj chaje) ak vizitè inik (yon fwa pa aparèy)
+    supabase.rpc("increment_site_view");
+    if (!localStorage.getItem("hf_visited")) {
+      localStorage.setItem("hf_visited", "1");
+      supabase.rpc("increment_unique_visitor");
+    }
   }, []);
 
   async function insertFilm(newFilm, status) {
@@ -1157,6 +1238,7 @@ export default function HyperFilms() {
                     <button onClick={() => { setView("upload"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.nav_staff}: {t.submit}</button>
                     <button onClick={() => { setView("pending"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.pending_title}</button>
                     <button onClick={() => { setView("manage"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.manage_films}</button>
+                    <button onClick={() => { setView("stats"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.stats_title}</button>
                     <button onClick={() => { setView("settings"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.nav_settings}</button>
                     <button onClick={handleLogout} className="flex items-center gap-1.5 w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#8C8A96" }}><LogOut size={13} /> Logout</button>
                   </>
@@ -1192,6 +1274,8 @@ export default function HyperFilms() {
         <PendingView t={t} lang={lang} films={films} onApprove={handleApprove} />
       ) : view === "manage" && staffUser ? (
         <ManageFilmsView t={t} lang={lang} films={films} onUpdatePoster={handleUpdatePoster} />
+      ) : view === "stats" && staffUser ? (
+        <StatsView t={t} lang={lang} films={films} siteStats={siteStats} />
       ) : view === "mylist" ? (
         <div className="px-5 sm:px-10 py-10">
           <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.my_list}</h2>
