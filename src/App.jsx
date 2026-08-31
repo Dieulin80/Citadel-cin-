@@ -612,8 +612,9 @@ function LoginGate({ lang, onLoggedIn }) {
   );
 }
 
-function UploadForm({ lang, t, isStaff, onQueueUpload }) {
+function UploadForm({ lang, t, isStaff, onQueueUpload, existingSeries }) {
   const [form, setForm] = useState({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "", seriesTitle: "", seasonNumber: "", episodeNumber: "" });
+  const [seriesMode, setSeriesMode] = useState("new"); // "new" | an existing series title
   const [videoFiles, setVideoFiles] = useState([]); // toujou yon lis, menm pou yon sèl fim
   const [posterFile, setPosterFile] = useState(null);
   const [error, setError] = useState("");
@@ -646,7 +647,14 @@ function UploadForm({ lang, t, isStaff, onQueueUpload }) {
   }
 
   function reset() {
-    setForm({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "", seriesTitle: "", seasonNumber: "", episodeNumber: "" });
+    if (seriesMode !== "new" && existingSeries && existingSeries[seriesMode]) {
+      const seasons = existingSeries[seriesMode];
+      const lastSeason = Math.max(...Object.keys(seasons).map(Number));
+      const nextEpisode = (seasons[lastSeason] || 0) + 1;
+      setForm({ title: seriesMode, year: "", duration: "", genreKey: "serie", desc: "", name: "", releaseDate: "", seriesTitle: seriesMode, seasonNumber: String(lastSeason), episodeNumber: String(nextEpisode) });
+    } else {
+      setForm({ title: "", year: "", duration: "", genreKey: "drama", desc: "", name: "", releaseDate: "", seriesTitle: "", seasonNumber: "", episodeNumber: "" });
+    }
     setVideoFiles([]); setPosterFile(null); setError("");
   }
 
@@ -704,10 +712,35 @@ function UploadForm({ lang, t, isStaff, onQueueUpload }) {
           )}
           {form.genreKey === "serie" && (
             <>
+              {Object.keys(existingSeries || {}).length > 0 && (
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>Seri</label>
+                  <select
+                    value={seriesMode}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSeriesMode(val);
+                      if (val === "new") {
+                        setForm({ ...form, seriesTitle: "", seasonNumber: "", episodeNumber: "" });
+                      } else {
+                        const seasons = existingSeries[val];
+                        const lastSeason = Math.max(...Object.keys(seasons).map(Number));
+                        const nextEpisode = (seasons[lastSeason] || 0) + 1;
+                        setForm({ ...form, title: val, seriesTitle: val, seasonNumber: String(lastSeason), episodeNumber: String(nextEpisode) });
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-md text-sm outline-none"
+                    style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }}
+                  >
+                    <option value="new">— Nouvo Seri —</option>
+                    {Object.keys(existingSeries).map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_series_title}</label>
-                <input value={form.seriesTitle} onChange={(e) => setForm({ ...form, seriesTitle: e.target.value })}
-                  className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
+                <input value={form.seriesTitle} disabled={seriesMode !== "new"} onChange={(e) => setForm({ ...form, seriesTitle: e.target.value })}
+                  className="w-full px-3 py-2 rounded-md text-sm outline-none disabled:opacity-60" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -721,6 +754,9 @@ function UploadForm({ lang, t, isStaff, onQueueUpload }) {
                     className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
                 </div>
               </div>
+              {seriesMode !== "new" && (
+                <p className="text-[11px]" style={{ color: "#8C8A96" }}>Sezon ak nimewo episòd yo ranpli otomatikman ak pwochen episòd ki disponib — ou ka toujou chanje yo manyèlman.</p>
+              )}
             </>
           )}
           <div>
@@ -1155,6 +1191,17 @@ export default function HyperFilms() {
     return ids.map((id) => approvedFilms.find((f) => f.id === id)).filter(Boolean);
   }, [approvedFilms, openFilm]);
 
+  const existingSeries = useMemo(() => {
+    const map = {};
+    films.filter((f) => f.genreKey === "serie" && f.seriesTitle).forEach((f) => {
+      if (!map[f.seriesTitle]) map[f.seriesTitle] = {};
+      const s = f.seasonNumber || 1;
+      const ep = f.episodeNumber || 0;
+      map[f.seriesTitle][s] = Math.max(map[f.seriesTitle][s] || 0, ep);
+    });
+    return map; // { "Tit Seri": { 1: 10, 2: 3 } }
+  }, [films]);
+
   const searchResults = useMemo(() => {
     if (!query) return null;
     return approvedFilms.filter((f) => f.title[lang].toLowerCase().includes(query.toLowerCase()));
@@ -1265,9 +1312,9 @@ export default function HyperFilms() {
       {(view === "catalog") && <GenreNav t={t} onSelect={scrollToGenre} />}
 
       {view === "upload" ? (
-        staffUser ? <UploadForm lang={lang} t={t} isStaff={true} onQueueUpload={queueUpload} /> : <LoginGate lang={lang} onLoggedIn={setStaffUser} />
+        staffUser ? <UploadForm lang={lang} t={t} isStaff={true} onQueueUpload={queueUpload} existingSeries={existingSeries} /> : <LoginGate lang={lang} onLoggedIn={setStaffUser} />
       ) : view === "community" ? (
-        <UploadForm lang={lang} t={t} isStaff={false} onQueueUpload={queueUpload} />
+        <UploadForm lang={lang} t={t} isStaff={false} onQueueUpload={queueUpload} existingSeries={existingSeries} />
       ) : view === "settings" && staffUser ? (
         <SettingsView t={t} settings={settings} onSave={handleSaveSettings} />
       ) : view === "pending" && staffUser ? (
