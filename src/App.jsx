@@ -51,7 +51,7 @@ const T = {
     f_series_title: "Tit Seri a", f_season: "Sezon #", f_episode: "Episòd #", episodes_label: "Episòd",
     manage_films: "Jere Fim", change_poster: "Chanje Poster", poster_updated: "Poster mete ajou!",
     stats_title: "ESTATISTIK SIT LA", total_views: "Total vizit paj", unique_visitors: "Moun diferan ki vizite",
-    top_films_views: "Fim ki pi gade yo",
+    top_films_views: "Fim ki pi gade yo", refresh: "Rafrechi",
   },
   fr: {
     nav_catalog: "Catalogue", nav_community: "Envoyer une vidéo", nav_staff: "Staff", nav_settings: "Paramètres",
@@ -79,7 +79,7 @@ const T = {
     f_series_title: "Titre de la série", f_season: "Saison n°", f_episode: "Épisode n°", episodes_label: "Épisodes",
     manage_films: "Gérer les Films", change_poster: "Changer l'affiche", poster_updated: "Affiche mise à jour !",
     stats_title: "STATISTIQUES DU SITE", total_views: "Total de vues", unique_visitors: "Visiteurs uniques",
-    top_films_views: "Films les plus regardés",
+    top_films_views: "Films les plus regardés", refresh: "Actualiser",
   },
   en: {
     nav_catalog: "Catalog", nav_community: "Submit a video", nav_staff: "Staff", nav_settings: "Settings",
@@ -107,7 +107,7 @@ const T = {
     f_series_title: "Series Title", f_season: "Season #", f_episode: "Episode #", episodes_label: "Episodes",
     manage_films: "Manage Films", change_poster: "Change Poster", poster_updated: "Poster updated!",
     stats_title: "SITE STATISTICS", total_views: "Total page views", unique_visitors: "Unique visitors",
-    top_films_views: "Most watched films",
+    top_films_views: "Most watched films", refresh: "Refresh",
   },
 };
 
@@ -398,15 +398,37 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
   const [playing, setPlaying] = useState(false);
   const [myRating, setMyRating] = useState(() => getLocalList("hf_rated").find((r) => r.id === film?.id)?.stars || 0);
   const [offlineStatus, setOfflineStatus] = useState("idle"); // idle | downloading | ready
-  const [downloadStatus, setDownloadStatus] = useState("idle");
+  const [downloadProgress, setDownloadProgress] = useState(0);
   const viewedRef = useRef(null);
 
-  async function handleRealDownload() {
+  useEffect(() => {
+    if (film && getLocalList("hf_offline").includes(film.id)) setOfflineStatus("ready");
+    else setOfflineStatus("idle");
+  }, [film]);
+
+  async function handleOfflineDownload() {
     if (!film.videoUrl) return;
-    setDownloadStatus("downloading");
+    setOfflineStatus("downloading");
+    setDownloadProgress(0);
     try {
       const res = await fetch(film.videoUrl);
-      const blob = await res.blob();
+      if (!res.ok || !res.body) throw new Error("Echèk telechajman");
+
+      const contentLength = res.headers.get("Content-Length");
+      const total = contentLength ? parseInt(contentLength, 10) : 0;
+      const reader = res.body.getReader();
+      const chunks = [];
+      let received = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        if (total) setDownloadProgress(Math.round((received / total) * 100));
+      }
+
+      const blob = new Blob(chunks);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -415,29 +437,13 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch {
-      // si fetch la echwe (CORS), retonbe sou lyen dirèk la kòm sekou
-      window.open(film.videoUrl, "_blank");
-    }
-    setDownloadStatus("idle");
-  }
 
-  useEffect(() => {
-    if (film && getLocalList("hf_offline").includes(film.id)) setOfflineStatus("ready");
-    else setOfflineStatus("idle");
-  }, [film]);
-
-  async function handleOfflineDownload() {
-    if (!film.videoUrl || !("caches" in window)) return;
-    setOfflineStatus("downloading");
-    try {
-      const cache = await caches.open("citadel-videos-v1");
-      await cache.add(film.videoUrl);
       const list = getLocalList("hf_offline");
       setLocalList("hf_offline", [...new Set([...list, film.id])]);
       setOfflineStatus("ready");
     } catch {
       setOfflineStatus("idle");
+      window.open(film.videoUrl, "_blank");
     }
   }
 
@@ -533,14 +539,21 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
             </button>
           </div>
           {film.videoUrl && (
-            <button
-              onClick={handleOfflineDownload}
-              disabled={offlineStatus !== "idle"}
-              className="flex items-center justify-center gap-2 mt-2 w-full py-2.5 rounded-md text-sm disabled:opacity-80"
-              style={{ border: "1px solid #2A2A38", color: offlineStatus === "ready" ? "#7BB88A" : "#C9A15A" }}
-            >
-              {offlineStatus === "ready" ? t.offline_ready : offlineStatus === "downloading" ? t.offline_downloading : t.offline_download}
-            </button>
+            <div className="mt-2">
+              <button
+                onClick={handleOfflineDownload}
+                disabled={offlineStatus !== "idle"}
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-md text-sm disabled:opacity-90"
+                style={{ border: "1px solid #2A2A38", color: offlineStatus === "ready" ? "#7BB88A" : "#C9A15A" }}
+              >
+                {offlineStatus === "ready" ? t.offline_ready : offlineStatus === "downloading" ? `${t.offline_downloading} ${downloadProgress}%` : t.offline_download}
+              </button>
+              {offlineStatus === "downloading" && (
+                <div className="h-1.5 rounded-full overflow-hidden mt-1.5" style={{ background: "#1D1D29" }}>
+                  <div className="h-full rounded-full transition-all" style={{ width: `${downloadProgress}%`, background: "#C9A15A" }} />
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -938,7 +951,7 @@ function ManageFilmsView({ t, lang, films, onUpdatePoster }) {
   );
 }
 
-function StatsView({ t, lang, films, siteStats }) {
+function StatsView({ t, lang, films, siteStats, onRefresh }) {
   const topFilms = [...films]
     .filter((f) => f.status === "approved")
     .sort((a, b) => b.viewCount - a.viewCount)
@@ -946,7 +959,10 @@ function StatsView({ t, lang, films, siteStats }) {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-10">
-      <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.stats_title}</h2>
+      <div className="flex items-center justify-between">
+        <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.stats_title}</h2>
+        <button onClick={onRefresh} className="text-xs px-3 py-1.5 rounded-md" style={{ border: "1px solid #2A2A38", color: "#C9A15A" }}>{t.refresh}</button>
+      </div>
       <div className="grid grid-cols-2 gap-3 mt-5">
         <div className="p-4 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
           <p className="text-2xl" style={{ color: "#C9A15A", fontFamily: "'Anton', sans-serif" }}>{siteStats.total_views ?? 0}</p>
@@ -1011,6 +1027,18 @@ export default function HyperFilms() {
       supabase.rpc("increment_unique_visitor");
     }
   }, []);
+
+  // Rafrechi done yo chak fwa staff louvri Estatistik oswa Jere Fim, pou nimewo yo toujou aktyèl
+  useEffect(() => {
+    if (view === "stats" || view === "manage" || view === "pending") {
+      supabase.from("films").select("*").order("created_at", { ascending: false }).then(({ data, error }) => {
+        if (!error && data) setFilms(data.map(dbRowToFilm));
+      });
+      supabase.from("site_stats").select("*").eq("id", 1).single().then(({ data }) => {
+        if (data) setSiteStats(data);
+      });
+    }
+  }, [view]);
 
   async function insertFilm(newFilm, status) {
     let poster_url = null;
@@ -1322,7 +1350,14 @@ export default function HyperFilms() {
       ) : view === "manage" && staffUser ? (
         <ManageFilmsView t={t} lang={lang} films={films} onUpdatePoster={handleUpdatePoster} />
       ) : view === "stats" && staffUser ? (
-        <StatsView t={t} lang={lang} films={films} siteStats={siteStats} />
+        <StatsView t={t} lang={lang} films={films} siteStats={siteStats} onRefresh={() => {
+          supabase.from("films").select("*").order("created_at", { ascending: false }).then(({ data, error }) => {
+            if (!error && data) setFilms(data.map(dbRowToFilm));
+          });
+          supabase.from("site_stats").select("*").eq("id", 1).single().then(({ data }) => {
+            if (data) setSiteStats(data);
+          });
+        }} />
       ) : view === "mylist" ? (
         <div className="px-5 sm:px-10 py-10">
           <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.my_list}</h2>
