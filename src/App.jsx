@@ -406,12 +406,31 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
     else setOfflineStatus("idle");
   }, [film]);
 
+  async function findWorkingVideoUrl() {
+    // film.videoUrl gen fòm: https://{cdn}/{videoId}/play_720p.mp4
+    const match = film.videoUrl.match(/^(https:\/\/[^/]+\/[^/]+\/)play_\d+p\.mp4$/);
+    if (!match) return film.videoUrl;
+    const base = match[1];
+    const resolutions = ["1080p", "720p", "480p", "360p", "240p"];
+    for (const res of resolutions) {
+      const candidate = `${base}play_${res}.mp4`;
+      try {
+        const head = await fetch(candidate, { method: "HEAD" });
+        if (head.ok) return candidate;
+      } catch {
+        // kontinye eseye pwochen rezolisyon an
+      }
+    }
+    return film.videoUrl;
+  }
+
   async function handleOfflineDownload() {
     if (!film.videoUrl) return;
     setOfflineStatus("downloading");
     setDownloadProgress(0);
     try {
-      const res = await fetch(film.videoUrl);
+      const workingUrl = await findWorkingVideoUrl();
+      const res = await fetch(workingUrl);
       if (!res.ok || !res.body) throw new Error("Echèk telechajman");
 
       const contentLength = res.headers.get("Content-Length");
