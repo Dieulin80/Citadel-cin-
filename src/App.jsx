@@ -514,6 +514,7 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadedBlob, setDownloadedBlob] = useState(null);
   const [downloadedUrl, setDownloadedUrl] = useState(null);
+  const [descExpanded, setDescExpanded] = useState(false);
   const [hasAccess, setHasAccess] = useState(hasActiveAccess());
   const [showPaywall, setShowPaywall] = useState(false);
   const [downloadBlocked, setDownloadBlocked] = useState(false);
@@ -704,7 +705,18 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
             <span className="flex items-center gap-1"><Clock size={12} /> {film.duration}</span>
             <span style={{ color: "#C9A15A" }}>{t.genre[film.genreKey]}</span>
           </div>
-          <p className="mt-3 text-sm leading-relaxed" style={{ color: "#B8B5C0", fontFamily: "'Work Sans', sans-serif" }}>{film.desc[lang]}</p>
+          <p
+            className="mt-3 text-sm leading-relaxed"
+            style={{
+              color: "#B8B5C0", fontFamily: "'Work Sans', sans-serif",
+              overflow: "hidden", textOverflow: "ellipsis",
+              display: descExpanded ? "block" : "-webkit-box",
+              WebkitLineClamp: descExpanded ? "unset" : 1,
+              WebkitBoxOrient: "vertical",
+            }}
+          >
+            {film.desc[lang]}
+          </p>
 
           {hasAccess && (
             <p className="text-[11px] mt-2" style={{ color: "#7BB88A" }}>
@@ -726,7 +738,7 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
             >
               <Play size={15} fill="#0A0A10" /> {t.watch}
             </button>
-            <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm" style={{ border: "1px solid #2A2A38", color: "#ECE8DD" }}>
+            <button onClick={() => setDescExpanded((e) => !e)} className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm" style={{ border: "1px solid #2A2A38", color: "#ECE8DD" }}>
               <Info size={15} /> {t.details}
             </button>
           </div>
