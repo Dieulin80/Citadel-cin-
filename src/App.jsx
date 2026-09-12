@@ -17,10 +17,14 @@ const LANGS = [
   { code: "en", label: "English" },
 ];
 
-const GENRE_KEYS = ["haitian", "drama", "action", "comedy", "documentary", "romance", "serie", "animation", "horror", "music", "thriller", "fantasy", "astrology"];
+const GENRE_KEYS = ["haitian", "drama", "action", "comedy", "documentary", "romance", "serie", "novelas", "animation", "horror", "music", "thriller", "fantasy", "astrology", "aventure", "zxp"];
+const HIDDEN_GENRE = "zxp"; // kategori ki parèt nan navigasyon an, men ki mande yon modpas separe lè moun antre ladan l
+const ZXP_PASSWORD = "4567";
+const COMMUNITY_GENRES = GENRE_KEYS.filter((g) => g !== HIDDEN_GENRE); // kominote a pa ka poste nan ZXP
+const EPISODIC_GENRES = ["serie", "novelas"]; // kategori ki sèvi ak sistèm sezon/episòd
 const WHATSAPP = [
-  { name: "Don Hyper", number: "50932399183" },
-  { name: "Alibaba", number: "50941728389" },
+  { name: "Don Hyper", number: "50932399183", natcash: "Chales Daniece" },
+  { name: "Alibaba", number: "50941728389", natcash: "Joseph Ethgard" },
 ];
 const WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/ICUvvhUOPEvEFgSXGFJZs5?s=cl&p=a&ilr=0";
 
@@ -28,7 +32,8 @@ const T = {
   ht: {
     nav_catalog: "Katalòg", nav_community: "Voye Videyo", nav_staff: "Staff", nav_settings: "Paramèt",
     search_ph: "Chèche yon vidyo...", featured: "Anvedèt", watch: "Gade Kounye a", details: "Detay",
-    genre: { haitian: "Vidyo Ayisyen", drama: "Dram", action: "Aksyon", comedy: "Komedi", documentary: "Dokimantè", romance: "Woman", serie: "Seri", animation: "Fim Animasyon (Timoun)", horror: "Fim Laterè", music: "Videyo Mizik", thriller: "Sispans", fantasy: "Fantasy", astrology: "Astwoloji" },
+    genre: { haitian: "Vidyo Ayisyen", drama: "Dram", action: "Aksyon", comedy: "Komedi", documentary: "Dokimantè", romance: "Woman", serie: "Seri", novelas: "Novelas", animation: "Fim Animasyon (Timoun)", horror: "Fim Laterè", music: "Videyo Mizik", thriller: "Sispans", fantasy: "Fantasy", astrology: "Astwoloji", aventure: "Avanti", zxp: "ZXP" },
+    zxp_prompt: "Antre modpas la", zxp_wrong: "Modpas pa kòrèk.", zxp_enter: "Antre",
     empty: "Pa gen vidyo ki matche rechèch la.",
     join_group: "Antre nan Gwoup WhatsApp",
     up_title: "AJOUTE YON VIDYO (STAFF)", up_sub: "Fim sa a ap parèt piblikman touswit.",
@@ -52,11 +57,20 @@ const T = {
     manage_films: "Jere Fim", change_poster: "Chanje Poster", poster_updated: "Poster mete ajou!",
     stats_title: "ESTATISTIK SIT LA", total_views: "Total vizit paj", unique_visitors: "Moun diferan ki vizite",
     top_films_views: "Fim ki pi gade yo", refresh: "Rafrechi",
+    access_required: "Prevyou a fini", access_desc: "Ou gade 15 segond gratis. Antre kòd aksè ou pou kontinye gade tout sit la pandan 1 mwa.",
+    access_price: "100 Goud", access_price_label: "pou 1 mwa aksè konplè",
+    payment_instructions: "Voye lajan an pa NatCash nan youn nan nimewo sa yo (verifye non ki afiche a), epi voye kaptirèkran peman an sou WhatsApp pou resevwa kòd ou:",
+    send_proof: "Voye Kapti Ekran sou WhatsApp",
+    code_ph: "Antre kòd aksè a", submit_code: "Debloke Aksè", code_invalid: "Kòd envalid oswa deja itilize.",
+    code_success: "Aksè debloke pou 1 mwa!", access_codes_menu: "Kòd Aksè", generate_code: "Jenere Nouvo Kòd",
+    code_unused: "Poko itilize", code_active: "Aktif jiska", code_expired: "Ekspire", have_access: "Ou gen aksè jiska",
+    client_name_ph: "Non kliyan an (opsyonèl)",
   },
   fr: {
     nav_catalog: "Catalogue", nav_community: "Envoyer une vidéo", nav_staff: "Staff", nav_settings: "Paramètres",
     search_ph: "Rechercher une vidéo...", featured: "À la une", watch: "Regarder", details: "Détails",
-    genre: { haitian: "Vidéos Haïtiennes", drama: "Drame", action: "Action", comedy: "Comédie", documentary: "Documentaire", romance: "Romance", serie: "Séries", animation: "Films d'Animation", horror: "Films d'Horreur", music: "Clips Musicaux", thriller: "Thriller", fantasy: "Fantasy", astrology: "Astrologie" },
+    genre: { haitian: "Vidéos Haïtiennes", drama: "Drame", action: "Action", comedy: "Comédie", documentary: "Documentaire", romance: "Romance", serie: "Séries", novelas: "Novelas", animation: "Films d'Animation", horror: "Films d'Horreur", music: "Clips Musicaux", thriller: "Thriller", fantasy: "Fantasy", astrology: "Astrologie", aventure: "Aventure", zxp: "ZXP" },
+    zxp_prompt: "Entrez le mot de passe", zxp_wrong: "Mot de passe incorrect.", zxp_enter: "Entrer",
     empty: "Aucune vidéo ne correspond à la recherche.",
     join_group: "Rejoindre le Groupe WhatsApp",
     up_title: "AJOUTER UNE VIDÉO (STAFF)", up_sub: "Cette vidéo apparaîtra publiquement immédiatement.",
@@ -80,11 +94,20 @@ const T = {
     manage_films: "Gérer les Films", change_poster: "Changer l'affiche", poster_updated: "Affiche mise à jour !",
     stats_title: "STATISTIQUES DU SITE", total_views: "Total de vues", unique_visitors: "Visiteurs uniques",
     top_films_views: "Films les plus regardés", refresh: "Actualiser",
+    access_required: "Aperçu terminé", access_desc: "Vous avez vu 15 secondes gratuites. Entrez votre code d'accès pour continuer à regarder tout le site pendant 1 mois.",
+    access_price: "100 Gourdes", access_price_label: "pour 1 mois d'accès complet",
+    payment_instructions: "Envoyez le paiement par NatCash à l'un de ces numéros (vérifiez le nom affiché), puis envoyez la capture d'écran du paiement sur WhatsApp pour recevoir votre code :",
+    send_proof: "Envoyer la Capture d'Écran sur WhatsApp",
+    code_ph: "Entrez le code d'accès", submit_code: "Débloquer l'accès", code_invalid: "Code invalide ou déjà utilisé.",
+    code_success: "Accès débloqué pour 1 mois !", access_codes_menu: "Codes d'Accès", generate_code: "Générer un Nouveau Code",
+    code_unused: "Pas encore utilisé", code_active: "Actif jusqu'au", code_expired: "Expiré", have_access: "Vous avez accès jusqu'au",
+    client_name_ph: "Nom du client (optionnel)",
   },
   en: {
     nav_catalog: "Catalog", nav_community: "Submit a video", nav_staff: "Staff", nav_settings: "Settings",
     search_ph: "Search a video...", featured: "Featured", watch: "Watch Now", details: "Details",
-    genre: { haitian: "Haitian Videos", drama: "Drama", action: "Action", comedy: "Comedy", documentary: "Documentary", romance: "Romance", serie: "Series", animation: "Animated Films", horror: "Horror Movies", music: "Music Videos", thriller: "Thriller", fantasy: "Fantasy", astrology: "Astrology" },
+    genre: { haitian: "Haitian Videos", drama: "Drama", action: "Action", comedy: "Comedy", documentary: "Documentary", romance: "Romance", serie: "Series", novelas: "Novelas", animation: "Animated Films", horror: "Horror Movies", music: "Music Videos", thriller: "Thriller", fantasy: "Fantasy", astrology: "Astrology", aventure: "Adventure", zxp: "ZXP" },
+    zxp_prompt: "Enter the password", zxp_wrong: "Incorrect password.", zxp_enter: "Enter",
     empty: "No videos match your search.",
     join_group: "Join WhatsApp Group",
     up_title: "ADD A VIDEO (STAFF)", up_sub: "This video will appear publicly right away.",
@@ -108,6 +131,14 @@ const T = {
     manage_films: "Manage Films", change_poster: "Change Poster", poster_updated: "Poster updated!",
     stats_title: "SITE STATISTICS", total_views: "Total page views", unique_visitors: "Unique visitors",
     top_films_views: "Most watched films", refresh: "Refresh",
+    access_required: "Preview ended", access_desc: "You've watched the free 15-second preview. Enter your access code to keep watching the whole site for 1 month.",
+    access_price: "100 Gourdes", access_price_label: "for 1 month of full access",
+    payment_instructions: "Send payment via NatCash to one of these numbers (verify the displayed name), then send the payment screenshot on WhatsApp to receive your code:",
+    send_proof: "Send Screenshot on WhatsApp",
+    code_ph: "Enter access code", submit_code: "Unlock Access", code_invalid: "Invalid or already-used code.",
+    code_success: "Access unlocked for 1 month!", access_codes_menu: "Access Codes", generate_code: "Generate New Code",
+    code_unused: "Not used yet", code_active: "Active until", code_expired: "Expired", have_access: "You have access until",
+    client_name_ph: "Client's name (optional)",
   },
 };
 
@@ -153,6 +184,19 @@ function dbRowToFilm(row) {
 function isUpcoming(film) {
   if (!film.releaseDate) return false;
   return new Date(film.releaseDate) > new Date();
+}
+
+// ---- Sistèm aksè peman manyèl (kòd 1 mwa) ----
+function getAccessExpiry() {
+  const v = localStorage.getItem("hf_access_expires");
+  return v ? new Date(v) : null;
+}
+function hasActiveAccess() {
+  const exp = getAccessExpiry();
+  return exp && exp > new Date();
+}
+function setAccessExpiry(dateIso) {
+  localStorage.setItem("hf_access_expires", dateIso);
 }
 
 // ---- "Ma Liste" ak "Kontinye Gade" — estoke lokalman sou telefòn/navigatè a ----
@@ -394,12 +438,102 @@ function SimpleRow({ title, list, lang, t, onOpen, myList, setMyList }) {
   );
 }
 
+function PaywallForm({ t, onUnlocked }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!code.trim()) return;
+    setLoading(true);
+    setError("");
+    const { data, error: rpcError } = await supabase.rpc("redeem_access_code", { p_code: code.trim() });
+    setLoading(false);
+    if (rpcError || !data || !data.ok) {
+      setError((data && data.message) || t.code_invalid);
+      return;
+    }
+    setAccessExpiry(data.expires_at);
+    onUnlocked(new Date(data.expires_at));
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center text-center p-6" style={{ minHeight: "220px" }}>
+      <p style={{ color: "#ECE8DD", fontWeight: 600 }}>{t.access_required}</p>
+      <p className="text-sm mt-1 mb-3" style={{ color: "#8C8A96" }}>{t.access_desc}</p>
+
+      <div className="mb-4">
+        <span style={{ fontFamily: "'Anton', sans-serif", color: "#C9A15A", fontSize: "1.8rem" }}>{t.access_price}</span>
+        <p className="text-[11px] mt-0.5" style={{ color: "#8C8A96" }}>{t.access_price_label}</p>
+      </div>
+
+      <div className="w-full max-w-xs p-3 rounded-md mb-4" style={{ background: "#1D1D29", border: "1px solid #2A2A38" }}>
+        <p className="text-xs mb-2.5" style={{ color: "#B8B5C0" }}>{t.payment_instructions}</p>
+        <div className="space-y-1.5">
+          {WHATSAPP.map((w) => (
+            <a
+              key={w.number}
+              href={`https://wa.me/${w.number}?text=${encodeURIComponent("Bonjou, men kapti ekran peman 100 Goud pou Citadel Ciné la:")}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-between px-3 py-2 rounded-md text-xs"
+              style={{ background: "#15151F", border: "1px solid #2A2A38", color: "#ECE8DD" }}
+            >
+              <span className="flex items-center gap-1.5"><MessageCircle size={13} style={{ color: "#25D366" }} /> {w.name}</span>
+              <span className="text-right">
+                <span style={{ color: "#C9A15A", display: "block" }}>{w.natcash}</span>
+                <span style={{ color: "#8C8A96", fontSize: "10px" }}>+{w.number}</span>
+              </span>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-2">
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder={t.code_ph}
+          className="w-full px-3 py-2 rounded-md text-sm outline-none text-center tracking-widest"
+          style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }}
+        />
+        {error && <p className="text-xs" style={{ color: "#D98080" }}>{error}</p>}
+        <button type="submit" disabled={loading} className="w-full py-2.5 rounded-md text-sm font-semibold disabled:opacity-40" style={{ background: "#C9A15A", color: "#0A0A10" }}>
+          {loading ? "..." : t.submit_code}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOpen }) {
   const [playing, setPlaying] = useState(false);
   const [myRating, setMyRating] = useState(() => getLocalList("hf_rated").find((r) => r.id === film?.id)?.stars || 0);
   const [offlineStatus, setOfflineStatus] = useState("idle"); // idle | downloading | ready
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadedBlob, setDownloadedBlob] = useState(null);
+  const [downloadedUrl, setDownloadedUrl] = useState(null);
+  const [hasAccess, setHasAccess] = useState(hasActiveAccess());
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [downloadBlocked, setDownloadBlocked] = useState(false);
+  const previewTimerRef = useRef(null);
   const viewedRef = useRef(null);
+
+  useEffect(() => {
+    if (playing && !hasAccess) {
+      previewTimerRef.current = setTimeout(() => {
+        setShowPaywall(true);
+      }, 15000);
+    }
+    return () => clearTimeout(previewTimerRef.current);
+  }, [playing, hasAccess]);
+
+  function handleUnlocked(expiryDate) {
+    setHasAccess(true);
+    setShowPaywall(false);
+    setDownloadBlocked(false);
+  }
 
   useEffect(() => {
     if (film && getLocalList("hf_offline").includes(film.id)) setOfflineStatus("ready");
@@ -444,18 +578,22 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
         if (done) break;
         chunks.push(value);
         received += value.length;
-        if (total) setDownloadProgress(Math.round((received / total) * 100));
+        const pct = total ? Math.round((received / total) * 100) : 0;
+        setDownloadProgress(pct);
+
+        if (!hasAccess && pct >= 15) {
+          reader.cancel();
+          setOfflineStatus("idle");
+          setDownloadBlocked(true);
+          setShowPaywall(true);
+          return;
+        }
       }
 
-      const blob = new Blob(chunks);
+      const blob = new Blob(chunks, { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${film.title[lang].replace(/[^a-z0-9]/gi, "_")}.mp4`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      setDownloadedBlob(blob);
+      setDownloadedUrl(url);
 
       const list = getLocalList("hf_offline");
       setLocalList("hf_offline", [...new Set([...list, film.id])]);
@@ -464,6 +602,31 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
       setOfflineStatus("idle");
       window.open(film.videoUrl, "_blank");
     }
+  }
+
+  function handleOpenVideo() {
+    if (downloadedUrl) window.open(downloadedUrl, "_blank");
+  }
+
+  async function handleSaveShare() {
+    if (!downloadedBlob) return;
+    const fileName = `${film.title[lang].replace(/[^a-z0-9]/gi, "_")}.mp4`;
+    const file = new File([downloadedBlob], fileName, { type: "video/mp4" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: film.title[lang] });
+        return;
+      } catch {
+        // moun anile pataje a, oswa li pa mache — kontinye sou fallback la
+      }
+    }
+    // Fallback pou navigatè ki pa sipòte "share" fichye (egzanp Android/desktop pi ansyen)
+    const a = document.createElement("a");
+    a.href = downloadedUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
 
   useEffect(() => {
@@ -489,7 +652,7 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
     await supabase.rpc("add_film_rating", { p_film_id: film.id, p_stars: stars });
   }
 
-  const isSeries = film.genreKey === "serie" && film.seriesTitle;
+  const isSeries = EPISODIC_GENRES.includes(film.genreKey) && film.seriesTitle;
   const episodes = isSeries
     ? (allFilms || [])
         .filter((f) => f.seriesTitle === film.seriesTitle && f.status === "approved")
@@ -500,7 +663,11 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: "rgba(6,6,10,0.85)" }} onClick={() => { onClose(); setPlaying(false); }}>
       <div className="w-full max-w-lg rounded-lg overflow-hidden my-8" style={{ background: "#15151F", border: "1px solid #2A2A38" }} onClick={(e) => e.stopPropagation()}>
-        {playing && embedUrl ? (
+        {showPaywall ? (
+          <div style={{ background: "#0A0A10" }}>
+            <PaywallForm t={t} onUnlocked={handleUnlocked} />
+          </div>
+        ) : playing && embedUrl ? (
           <div className="relative w-full" style={{ aspectRatio: "16/9", background: "#000" }}>
             <iframe
               src={embedUrl}
@@ -539,6 +706,12 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
           </div>
           <p className="mt-3 text-sm leading-relaxed" style={{ color: "#B8B5C0", fontFamily: "'Work Sans', sans-serif" }}>{film.desc[lang]}</p>
 
+          {hasAccess && (
+            <p className="text-[11px] mt-2" style={{ color: "#7BB88A" }}>
+              {t.have_access} {getAccessExpiry()?.toLocaleDateString(lang === "en" ? "en-US" : lang === "fr" ? "fr-FR" : "fr-HT")}
+            </p>
+          )}
+
           <div className="mt-3">
             <p className="text-[11px] mb-1" style={{ color: "#8C8A96" }}>{myRating ? t.your_rating : t.rate_this}</p>
             <StarRating film={film} onRate={myRating ? undefined : handleRate} />
@@ -559,18 +732,42 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
           </div>
           {film.videoUrl && (
             <div className="mt-2">
-              <button
-                onClick={handleOfflineDownload}
-                disabled={offlineStatus !== "idle"}
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-md text-sm disabled:opacity-90"
-                style={{ border: "1px solid #2A2A38", color: offlineStatus === "ready" ? "#7BB88A" : "#C9A15A" }}
-              >
-                {offlineStatus === "ready" ? t.offline_ready : offlineStatus === "downloading" ? `${t.offline_downloading} ${downloadProgress}%` : t.offline_download}
-              </button>
+              {offlineStatus === "ready" && downloadedUrl ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleOpenVideo}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-semibold"
+                    style={{ background: "#C9A15A", color: "#0A0A10" }}
+                  >
+                    <Play size={14} fill="#0A0A10" /> Louvri Videyo a
+                  </button>
+                  <button
+                    onClick={handleSaveShare}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm"
+                    style={{ border: "1px solid #2A2A38", color: "#ECE8DD" }}
+                  >
+                    <UploadCloud size={14} style={{ transform: "rotate(180deg)" }} /> Anrejistre / Pataje
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleOfflineDownload}
+                  disabled={offlineStatus !== "idle"}
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-md text-sm disabled:opacity-90"
+                  style={{ border: "1px solid #2A2A38", color: "#C9A15A" }}
+                >
+                  {offlineStatus === "downloading" ? `${t.offline_downloading} ${downloadProgress}%` : t.offline_download}
+                </button>
+              )}
               {offlineStatus === "downloading" && (
                 <div className="h-1.5 rounded-full overflow-hidden mt-1.5" style={{ background: "#1D1D29" }}>
                   <div className="h-full rounded-full transition-all" style={{ width: `${downloadProgress}%`, background: "#C9A15A" }} />
                 </div>
+              )}
+              {offlineStatus === "ready" && (
+                <p className="text-[11px] mt-1.5 text-center" style={{ color: "#8C8A96" }}>
+                  Sou iPhone: klike "Anrejistre / Pataje" epi chwazi "Save Video" pou mete l nan Foto ou.
+                </p>
               )}
             </div>
           )}
@@ -651,7 +848,7 @@ function UploadForm({ lang, t, isStaff, onQueueUpload, existingSeries }) {
   const [posterFile, setPosterFile] = useState(null);
   const [error, setError] = useState("");
   const [justQueued, setJustQueued] = useState(false);
-  const isSerie = form.genreKey === "serie";
+  const isSerie = EPISODIC_GENRES.includes(form.genreKey);
   const canSubmit = form.title && form.year && videoFiles.length > 0;
 
   function naturalSort(a, b) {
@@ -727,7 +924,7 @@ function UploadForm({ lang, t, isStaff, onQueueUpload, existingSeries }) {
             <label className="block text-xs mb-1" style={{ color: "#8C8A96" }}>{t.f_genre}</label>
             <select value={form.genreKey} onChange={(e) => setForm({ ...form, genreKey: e.target.value })}
               className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }}>
-              {GENRE_KEYS.map((g) => <option key={g} value={g}>{t.genre[g]}</option>)}
+              {(isStaff ? GENRE_KEYS : COMMUNITY_GENRES).map((g) => <option key={g} value={g}>{t.genre[g]}</option>)}
             </select>
           </div>
           <div>
@@ -742,7 +939,7 @@ function UploadForm({ lang, t, isStaff, onQueueUpload, existingSeries }) {
                 className="w-full px-3 py-2 rounded-md text-sm outline-none" style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }} />
             </div>
           )}
-          {form.genreKey === "serie" && (
+          {EPISODIC_GENRES.includes(form.genreKey) && (
             <>
               {Object.keys(existingSeries || {}).length > 0 && (
                 <div>
@@ -1007,6 +1204,159 @@ function StatsView({ t, lang, films, siteStats, onRefresh }) {
   );
 }
 
+function AccessCodesView({ t, lang }) {
+  const [codes, setCodes] = useState([]);
+  const [generating, setGenerating] = useState(false);
+  const [clientName, setClientName] = useState("");
+  const [duration, setDuration] = useState("30");
+  const [customDuration, setCustomDuration] = useState("");
+
+  function loadCodes() {
+    supabase.from("access_codes").select("*").order("created_at", { ascending: false }).then(({ data }) => {
+      if (data) setCodes(data);
+    });
+  }
+
+  useEffect(() => { loadCodes(); }, []);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    const code = Array.from({ length: 8 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
+    const finalDuration = duration === "custom" ? parseInt(customDuration, 10) || 30 : parseInt(duration, 10);
+    const { error } = await supabase.from("access_codes").insert({ code, client_name: clientName.trim() || null, duration_days: finalDuration });
+    setGenerating(false);
+    if (!error) {
+      setClientName("");
+      loadCodes();
+    }
+  }
+
+  async function handleBlock(code) {
+    await supabase.from("access_codes").update({ blocked: true }).eq("code", code);
+    loadCodes();
+  }
+
+  function statusOf(c) {
+    if (c.blocked) return { label: "Bloke", color: "#D98080" };
+    if (!c.used_at) return { label: `${t.code_unused} (${c.duration_days || 30}j)`, color: "#8C8A96" };
+    const exp = new Date(c.expires_at);
+    if (exp > new Date()) return { label: `${t.code_active} ${exp.toLocaleDateString(lang === "en" ? "en-US" : lang === "fr" ? "fr-FR" : "fr-HT")}`, color: "#7BB88A" };
+    return { label: t.code_expired, color: "#D98080" };
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto px-4 py-10">
+      <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.access_codes_menu}</h2>
+      <div className="space-y-2 mt-5">
+        <input
+          value={clientName}
+          onChange={(e) => setClientName(e.target.value)}
+          placeholder={t.client_name_ph}
+          className="w-full px-3 py-2 rounded-md text-sm outline-none"
+          style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }}
+        />
+        <div className="flex gap-2">
+          <select
+            value={duration}
+            onChange={(e) => setDuration(e.target.value)}
+            className="px-3 py-2 rounded-md text-sm outline-none"
+            style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }}
+          >
+            <option value="30">30 jou</option>
+            <option value="60">60 jou</option>
+            <option value="90">90 jou</option>
+            <option value="365">1 ane</option>
+            <option value="custom">Pèsonalize...</option>
+          </select>
+          {duration === "custom" && (
+            <input
+              type="number"
+              min="1"
+              value={customDuration}
+              onChange={(e) => setCustomDuration(e.target.value)}
+              placeholder="Konbyen jou?"
+              className="flex-1 px-3 py-2 rounded-md text-sm outline-none"
+              style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }}
+            />
+          )}
+          <button onClick={handleGenerate} disabled={generating} className="text-xs px-3 py-2 rounded-md font-semibold shrink-0" style={{ background: "#C9A15A", color: "#0A0A10" }}>
+            {generating ? "..." : t.generate_code}
+          </button>
+        </div>
+      </div>
+      <div className="mt-5 space-y-2">
+        {codes.map((c) => {
+          const s = statusOf(c);
+          return (
+            <div key={c.code} className="flex items-center justify-between p-3 rounded-md" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
+              <div>
+                <span className="text-sm tracking-widest block" style={{ color: "#ECE8DD", fontFamily: "monospace" }}>{c.code}</span>
+                {c.client_name && <span className="text-xs" style={{ color: "#8C8A96" }}>{c.client_name}</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: s.color }}>{s.label}</span>
+                {!c.used_at && !c.blocked && (
+                  <button onClick={() => handleBlock(c.code)} className="text-[10px] px-2 py-1 rounded" style={{ border: "1px solid #2A2A38", color: "#D98080" }}>
+                    Bloke
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {codes.length === 0 && <p className="text-sm" style={{ color: "#8C8A96" }}>{t.empty}</p>}
+      </div>
+    </div>
+  );
+}
+
+function ZxpRow({ films, lang, t, onOpen, myList, setMyList, unlocked, setUnlocked }) {
+  const [pass, setPass] = useState("");
+  const [error, setError] = useState("");
+  const zxpFilms = films.filter((f) => f.genreKey === HIDDEN_GENRE && f.status === "approved");
+  if (zxpFilms.length === 0 && !unlocked) return null;
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (pass === ZXP_PASSWORD) {
+      setUnlocked(true);
+      setError("");
+    } else {
+      setError(t.zxp_wrong);
+    }
+  }
+
+  return (
+    <div className="py-3 scroll-mt-24" id="genre-row-zxp">
+      <h2 className="px-5 sm:px-10 mb-2 text-sm font-semibold" style={{ color: "#ECE8DD", fontFamily: "'Work Sans', sans-serif" }}>{t.genre.zxp}</h2>
+      {!unlocked ? (
+        <div className="px-5 sm:px-10">
+          <form onSubmit={handleSubmit} className="flex gap-2 max-w-xs">
+            <input
+              type="password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              placeholder={t.zxp_prompt}
+              className="flex-1 px-3 py-2 rounded-md text-sm outline-none"
+              style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }}
+            />
+            <button type="submit" className="px-4 py-2 rounded-md text-sm font-semibold shrink-0" style={{ background: "#C9A15A", color: "#0A0A10" }}>
+              {t.zxp_enter}
+            </button>
+          </form>
+          {error && <p className="text-xs mt-1.5" style={{ color: "#D98080" }}>{error}</p>}
+        </div>
+      ) : (
+        <div className="flex gap-3 px-5 sm:px-10 overflow-x-auto pb-2">
+          {zxpFilms.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={onOpen} myList={myList} setMyList={setMyList} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+
 
 export default function HyperFilms() {
   const [view, setView] = useState("catalog");
@@ -1022,6 +1372,7 @@ export default function HyperFilms() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [uploadQueue, setUploadQueue] = useState([]); // {id, label, progress, statusText: 'uploading'|'done'|'error', error}
   const [siteStats, setSiteStats] = useState({ total_views: 0, unique_visitors: 0 });
+  const [zxpUnlocked, setZxpUnlocked] = useState(false);
 
   useEffect(() => {
     setMyList(getLocalList("hf_my_list"));
@@ -1218,7 +1569,27 @@ export default function HyperFilms() {
   const t = T[lang];
   const approvedAll = films.filter((f) => f.status === "approved");
   const approvedFilms = approvedAll.filter((f) => !isUpcoming(f));
-  const featured = approvedFilms.find((f) => f.featured) || approvedFilms[0];
+
+  // Pou katalòg la: gwoupe episòd seri/novelas yo an YON SÈL kat pa seri (pa youn pa episòd)
+  const catalogFilms = useMemo(() => {
+    const seenSeries = new Set();
+    const result = [];
+    for (const f of approvedFilms) {
+      if (EPISODIC_GENRES.includes(f.genreKey) && f.seriesTitle) {
+        if (seenSeries.has(f.seriesTitle)) continue;
+        seenSeries.add(f.seriesTitle);
+        // chwazi episòd ki pi ba nimewo (S1E1) kòm reprezantan an
+        const allEpisodes = approvedFilms.filter((e) => e.genreKey === f.genreKey && e.seriesTitle === f.seriesTitle);
+        const rep = [...allEpisodes].sort((a, b) => (a.seasonNumber || 0) - (b.seasonNumber || 0) || (a.episodeNumber || 0) - (b.episodeNumber || 0))[0];
+        result.push(rep);
+      } else {
+        result.push(f);
+      }
+    }
+    return result;
+  }, [approvedFilms]);
+
+  const featured = catalogFilms.find((f) => f.featured) || catalogFilms[0];
 
   const continueWatching = useMemo(() => {
     const ids = getLocalList("hf_recent");
@@ -1240,7 +1611,7 @@ export default function HyperFilms() {
 
   const existingSeries = useMemo(() => {
     const map = {};
-    films.filter((f) => f.genreKey === "serie" && f.seriesTitle).forEach((f) => {
+    films.filter((f) => EPISODIC_GENRES.includes(f.genreKey) && f.seriesTitle).forEach((f) => {
       if (!map[f.seriesTitle]) map[f.seriesTitle] = {};
       const s = f.seasonNumber || 1;
       const ep = f.episodeNumber || 0;
@@ -1251,8 +1622,8 @@ export default function HyperFilms() {
 
   const searchResults = useMemo(() => {
     if (!query) return null;
-    return approvedFilms.filter((f) => f.title[lang].toLowerCase().includes(query.toLowerCase()));
-  }, [approvedFilms, query, lang]);
+    return catalogFilms.filter((f) => f.title[lang].toLowerCase().includes(query.toLowerCase()));
+  }, [catalogFilms, query, lang]);
 
   return (
     <div className="min-h-screen" style={{ background: "#0A0A10" }}>
@@ -1293,9 +1664,9 @@ export default function HyperFilms() {
             ⬇ {t.nav_offline}
           </button>
 
-          <button onClick={() => setView("mylist")} className="hidden sm:flex px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
+          <button onClick={() => setView("mylist")} className="flex px-2.5 sm:px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
             style={{ color: view === "mylist" ? "#0A0A10" : "#ECE8DD", background: view === "mylist" ? "#C9A15A" : "transparent" }}>
-            ✓ {t.my_list}
+            ✓ <span className="hidden sm:inline">{t.my_list}</span>
           </button>
 
           <button onClick={() => setView("community")} className="hidden sm:flex px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
@@ -1333,6 +1704,7 @@ export default function HyperFilms() {
                     <button onClick={() => { setView("pending"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.pending_title}</button>
                     <button onClick={() => { setView("manage"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.manage_films}</button>
                     <button onClick={() => { setView("stats"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.stats_title}</button>
+                    <button onClick={() => { setView("codes"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.access_codes_menu}</button>
                     <button onClick={() => { setView("settings"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.nav_settings}</button>
                     <button onClick={handleLogout} className="flex items-center gap-1.5 w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#8C8A96" }}><LogOut size={13} /> Logout</button>
                   </>
@@ -1377,6 +1749,8 @@ export default function HyperFilms() {
             if (data) setSiteStats(data);
           });
         }} />
+      ) : view === "codes" && staffUser ? (
+        <AccessCodesView t={t} lang={lang} />
       ) : view === "mylist" ? (
         <div className="px-5 sm:px-10 py-10">
           <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.my_list}</h2>
@@ -1431,7 +1805,13 @@ export default function HyperFilms() {
               <ComingSoonRow films={approvedAll} lang={lang} t={t} />
               <SimpleRow title={t.continue_watching} list={continueWatching} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
               <SimpleRow title={t.top10} list={top10} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
-              {GENRE_KEYS.map((g) => <Row key={g} genreKey={g} films={approvedFilms} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
+              {GENRE_KEYS.map((g) =>
+                g === HIDDEN_GENRE ? (
+                  <ZxpRow key={g} films={catalogFilms} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} unlocked={zxpUnlocked} setUnlocked={setZxpUnlocked} />
+                ) : (
+                  <Row key={g} genreKey={g} films={catalogFilms} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
+                )
+              )}
             </div>
           )}
         </>
