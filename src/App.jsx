@@ -65,6 +65,7 @@ const T = {
     code_success: "Aksè debloke pou 1 mwa!", access_codes_menu: "Kòd Aksè", generate_code: "Jenere Nouvo Kòd",
     code_unused: "Poko itilize", code_active: "Aktif jiska", code_expired: "Ekspire", have_access: "Ou gen aksè jiska",
     client_name_ph: "Non kliyan an (opsyonèl)",
+    renew_warning_1: "Abònman w ap ekspire", renew_warning_2: "jou", renew_now: "Renouvle Kounye a", renew_today: "Abònman w ap ekspire jodi a!",
   },
   fr: {
     nav_catalog: "Catalogue", nav_community: "Envoyer une vidéo", nav_staff: "Staff", nav_settings: "Paramètres",
@@ -102,6 +103,7 @@ const T = {
     code_success: "Accès débloqué pour 1 mois !", access_codes_menu: "Codes d'Accès", generate_code: "Générer un Nouveau Code",
     code_unused: "Pas encore utilisé", code_active: "Actif jusqu'au", code_expired: "Expiré", have_access: "Vous avez accès jusqu'au",
     client_name_ph: "Nom du client (optionnel)",
+    renew_warning_1: "Votre abonnement expire dans", renew_warning_2: "jours", renew_now: "Renouveler Maintenant", renew_today: "Votre abonnement expire aujourd'hui !",
   },
   en: {
     nav_catalog: "Catalog", nav_community: "Submit a video", nav_staff: "Staff", nav_settings: "Settings",
@@ -139,6 +141,7 @@ const T = {
     code_success: "Access unlocked for 1 month!", access_codes_menu: "Access Codes", generate_code: "Generate New Code",
     code_unused: "Not used yet", code_active: "Active until", code_expired: "Expired", have_access: "You have access until",
     client_name_ph: "Client's name (optional)",
+    renew_warning_1: "Your subscription expires in", renew_warning_2: "days", renew_now: "Renew Now", renew_today: "Your subscription expires today!",
   },
 };
 
@@ -197,6 +200,13 @@ function hasActiveAccess() {
 }
 function setAccessExpiry(dateIso) {
   localStorage.setItem("hf_access_expires", dateIso);
+}
+function daysUntilExpiry() {
+  const exp = getAccessExpiry();
+  if (!exp) return null;
+  const diffMs = exp.getTime() - Date.now();
+  if (diffMs <= 0) return null; // deja ekspire, pa yon "abòne aktif" ankò
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 }
 
 // ---- "Ma Liste" ak "Kontinye Gade" — estoke lokalman sou telefòn/navigatè a ----
@@ -518,6 +528,7 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
   const [hasAccess, setHasAccess] = useState(hasActiveAccess());
   const [showPaywall, setShowPaywall] = useState(false);
   const [downloadBlocked, setDownloadBlocked] = useState(false);
+  const modalScrollRef = useRef(null);
   const previewTimerRef = useRef(null);
   const viewedRef = useRef(null);
 
@@ -529,6 +540,12 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
     }
     return () => clearTimeout(previewTimerRef.current);
   }, [playing, hasAccess]);
+
+  useEffect(() => {
+    if (showPaywall && modalScrollRef.current) {
+      modalScrollRef.current.scrollTo({ top: 0, behavior: "auto" });
+    }
+  }, [showPaywall]);
 
   function handleUnlocked(expiryDate) {
     setHasAccess(true);
@@ -605,10 +622,6 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
     }
   }
 
-  function handleOpenVideo() {
-    if (downloadedUrl) window.open(downloadedUrl, "_blank");
-  }
-
   async function handleSaveShare() {
     if (!downloadedBlob) return;
     const fileName = `${film.title[lang].replace(/[^a-z0-9]/gi, "_")}.mp4`;
@@ -662,7 +675,7 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
   const similar = isSeries ? [] : (allFilms || []).filter((f) => f.genreKey === film.genreKey && f.id !== film.id && f.status === "approved" && !isUpcoming(f)).slice(0, 6);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: "rgba(6,6,10,0.85)" }} onClick={() => { onClose(); setPlaying(false); }}>
+    <div ref={modalScrollRef} className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: "rgba(6,6,10,0.85)" }} onClick={() => { onClose(); setPlaying(false); }}>
       <div className="w-full max-w-lg rounded-lg overflow-hidden my-8" style={{ background: "#15151F", border: "1px solid #2A2A38" }} onClick={(e) => e.stopPropagation()}>
         {showPaywall ? (
           <div style={{ background: "#0A0A10" }}>
@@ -745,22 +758,22 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
           {film.videoUrl && (
             <div className="mt-2">
               {offlineStatus === "ready" && downloadedUrl ? (
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleOpenVideo}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-semibold"
-                    style={{ background: "#C9A15A", color: "#0A0A10" }}
-                  >
-                    <Play size={14} fill="#0A0A10" /> Louvri Videyo a
-                  </button>
+                <>
+                  <video
+                    src={downloadedUrl}
+                    controls
+                    playsInline
+                    className="w-full rounded-md mb-2"
+                    style={{ background: "#000", maxHeight: "220px" }}
+                  />
                   <button
                     onClick={handleSaveShare}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-sm"
-                    style={{ border: "1px solid #2A2A38", color: "#ECE8DD" }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md text-sm font-semibold"
+                    style={{ background: "#C9A15A", color: "#0A0A10" }}
                   >
                     <UploadCloud size={14} style={{ transform: "rotate(180deg)" }} /> Anrejistre / Pataje
                   </button>
-                </div>
+                </>
               ) : (
                 <button
                   onClick={handleOfflineDownload}
@@ -1370,6 +1383,31 @@ function ZxpRow({ films, lang, t, onOpen, myList, setMyList, unlocked, setUnlock
 
 
 
+function RenewalBanner({ t }) {
+  const [dismissed, setDismissed] = useState(false);
+  const days = daysUntilExpiry();
+
+  if (dismissed || days === null || days > 5) return null;
+
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ background: "#C9A15A" }}>
+      <p className="text-xs font-semibold flex-1" style={{ color: "#0A0A10" }}>
+        {days <= 0 ? t.renew_today : `${t.renew_warning_1} ${days} ${t.renew_warning_2}`}
+      </p>
+      <a
+        href={`https://wa.me/${WHATSAPP[0].number}?text=${encodeURIComponent("Bonjou, mwen vle renouvle abònman m nan pou Citadel Ciné.")}`}
+        target="_blank"
+        rel="noreferrer"
+        className="text-xs font-semibold px-3 py-1.5 rounded-md shrink-0"
+        style={{ background: "#0A0A10", color: "#C9A15A" }}
+      >
+        {t.renew_now}
+      </a>
+      <button onClick={() => setDismissed(true)} style={{ color: "#0A0A10" }} className="shrink-0"><X size={16} /></button>
+    </div>
+  );
+}
+
 export default function HyperFilms() {
   const [view, setView] = useState("catalog");
   const [lang, setLang] = useState("fr");
@@ -1641,6 +1679,8 @@ export default function HyperFilms() {
     <div className="min-h-screen" style={{ background: "#0A0A10" }}>
       <style>{FONT_IMPORT}</style>
 
+      <RenewalBanner t={t} />
+
       {/* Ticker */}
       <Ticker />
 
@@ -1837,22 +1877,4 @@ export default function HyperFilms() {
             <div key={q.id} className="rounded-md p-3 shadow-lg" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-xs truncate pr-2" style={{ color: "#ECE8DD", fontWeight: 600 }}>{q.label}</p>
-                {q.statusText === "done" && <Check size={14} style={{ color: "#7BB88A" }} />}
-              </div>
-              {q.statusText === "error" ? (
-                <p className="text-[11px]" style={{ color: "#D98080" }}>{q.error}</p>
-              ) : (
-                <>
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#1D1D29" }}>
-                    <div className="h-full rounded-full transition-all" style={{ width: `${q.progress}%`, background: q.statusText === "done" ? "#7BB88A" : "#C9A15A" }} />
-                  </div>
-                  <p className="text-[10px] mt-1" style={{ color: "#8C8A96" }}>{q.statusText === "done" ? "Fini!" : `${q.progress}%`}</p>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+                {q.statusText === "done" && <Check size={14} style={{ color: "#7BB88A"
