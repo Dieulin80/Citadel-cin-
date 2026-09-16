@@ -1877,4 +1877,27 @@ export default function HyperFilms() {
             <div key={q.id} className="rounded-md p-3 shadow-lg" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
               <div className="flex items-center justify-between mb-1.5">
                 <p className="text-xs truncate pr-2" style={{ color: "#ECE8DD", fontWeight: 600 }}>{q.label}</p>
-                {q.statusText === "done" && <Check size={14} style={{ color: "#7BB88A"
+                {q.statusText === "done" && <Check size={14} style={{ color: "#7BB88A" }} />}
+                {q.statusText === "uploading" && <span className="text-[11px] shrink-0" style={{ color: "#C9A15A" }}>{q.progress}%</span>}
+                {q.statusText === "error" && (
+                  <button onClick={() => setUploadQueue((prev) => prev.filter((item) => item.id !== q.id))} className="shrink-0" style={{ color: "#8C8A96" }}>
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              <div className="h-1 rounded-full overflow-hidden" style={{ background: "#2A2A38" }}>
+                <div className="h-full transition-all" style={{
+                  width: `${q.statusText === "error" ? 100 : q.progress}%`,
+                  background: q.statusText === "error" ? "#D98080" : q.statusText === "done" ? "#7BB88A" : "#C9A15A",
+                }} />
+              </div>
+              <p className="text-[11px] mt-1.5 break-words" style={{ color: q.statusText === "error" ? "#D98080" : "#8C8A96" }}>
+                {q.statusText === "error" ? q.error : q.statusText === "done" ? t.done_title : t.uploading}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
