@@ -19,7 +19,8 @@ const LANGS = [
 
 const GENRE_KEYS = ["haitian", "drama", "action", "comedy", "documentary", "romance", "serie", "novelas", "animation", "horror", "music", "thriller", "fantasy", "astrology", "aventure", "zxp"];
 const HIDDEN_GENRE = "zxp"; // kategori ki parèt nan navigasyon an, men ki mande yon modpas separe lè moun antre ladan l
-const ZXP_PASSWORD = "4567";
+// ZXP_PASSWORD retire — modpas la kounye a tcheke sou sèvè a (gade check_zxp_password.sql)
+const ONESIGNAL_APP_ID = "92996af2-83fc-4ab6-b275-519da789ff0a";
 const COMMUNITY_GENRES = GENRE_KEYS.filter((g) => g !== HIDDEN_GENRE); // kominote a pa ka poste nan ZXP
 const EPISODIC_GENRES = ["serie", "novelas"]; // kategori ki sèvi ak sistèm sezon/episòd
 const WHATSAPP = [
@@ -201,6 +202,28 @@ function hasActiveAccess() {
 function setAccessExpiry(dateIso) {
   localStorage.setItem("hf_access_expires", dateIso);
 }
+function getAccessCode() {
+  return localStorage.getItem("hf_access_code") || "";
+}
+function setAccessCode(code) {
+  localStorage.setItem("hf_access_code", code);
+}
+function clearAccess() {
+  localStorage.removeItem("hf_access_expires");
+  localStorage.removeItem("hf_access_code");
+}
+// Re-verifye sou sèvè a si kòd la bloke oswa ekspire — pou moun ki deja gen aksè a pa kenbe l si staff bloke kòd la apre
+async function revalidateAccess() {
+  const code = getAccessCode();
+  if (!code) return hasActiveAccess();
+  const { data, error } = await supabase.rpc("check_access_code_status", { p_code: code });
+  if (error || !data || !data.ok || data.blocked) {
+    clearAccess();
+    return false;
+  }
+  if (data.expires_at) setAccessExpiry(data.expires_at);
+  return hasActiveAccess();
+}
 function daysUntilExpiry() {
   const exp = getAccessExpiry();
   if (!exp) return null;
@@ -381,6 +404,39 @@ function ComingSoonRow({ films, lang, t }) {
   );
 }
 
+function LazyPoster({ src, color, className, children }) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!ref.current || !src) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisible(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin: "300px" }
+    );
+    obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, [src]);
+
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={
+        visible && src
+          ? { backgroundImage: `linear-gradient(to top, rgba(10,10,16,0.85), rgba(10,10,16,0)), url(${src})`, backgroundSize: "cover", backgroundPosition: "center" }
+          : { background: `linear-gradient(160deg, ${color}, #0A0A10)` }
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
 function FilmCard({ film, lang, t, onOpen, myList, setMyList }) {
   const avg = film.ratingCount > 0 ? (film.ratingSum / film.ratingCount).toFixed(1) : null;
   return (
@@ -390,20 +446,17 @@ function FilmCard({ film, lang, t, onOpen, myList, setMyList }) {
       style={{ backgroundColor: "#15151F" }}
     >
       {myList && setMyList && <MyListButton filmId={film.id} myList={myList} setMyList={setMyList} />}
-      <div
+      <LazyPoster
+        src={film.posterUrl}
+        color={film.color}
         className="aspect-[2/3] w-full flex items-end p-3 transition-transform duration-300 group-hover:scale-[1.05]"
-        style={
-          film.posterUrl
-            ? { backgroundImage: `linear-gradient(to top, rgba(10,10,16,0.85), rgba(10,10,16,0)), url(${film.posterUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-            : { background: `linear-gradient(160deg, ${film.color}, #0A0A10)` }
-        }
       >
         <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-full">
           <div className="flex items-center gap-1 text-[11px]" style={{ color: "#C9A15A" }}>
             <Clock size={12} /> {film.duration}
           </div>
         </div>
-      </div>
+      </LazyPoster>
       <div className="absolute top-2 right-2 text-[10px] px-1.5 py-0.5 rounded" style={{ background: "rgba(10,10,16,0.7)", color: "#8C8A96" }}>
         {film.year}
       </div>
@@ -465,6 +518,7 @@ function PaywallForm({ t, onUnlocked }) {
       return;
     }
     setAccessExpiry(data.expires_at);
+    setAccessCode(code.trim());
     onUnlocked(new Date(data.expires_at));
   }
 
@@ -539,6 +593,29 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
       }, 15000);
     }
     return () => clearTimeout(previewTimerRef.current);
+  }, [playing, hasAccess]);
+
+  // Chak fwa moun louvri yon fim, tcheke sou sèvè a si kòd li a poko bloke
+  useEffect(() => {
+    if (!film) return;
+    if (hasActiveAccess()) {
+      revalidateAccess().then((stillValid) => setHasAccess(stillValid));
+    }
+  }, [film]);
+
+  // Pandan moun ap gade, kontinye tcheke chak 2 minit pou bloke aksè imedyatman si staff bloke kòd la
+  useEffect(() => {
+    if (!playing || !hasAccess) return;
+    const id = setInterval(() => {
+      revalidateAccess().then((stillValid) => {
+        if (!stillValid) {
+          setHasAccess(false);
+          setPlaying(false);
+          setShowPaywall(true);
+        }
+      });
+    }, 120000);
+    return () => clearInterval(id);
   }, [playing, hasAccess]);
 
   useEffect(() => {
@@ -1320,7 +1397,7 @@ function AccessCodesView({ t, lang }) {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs" style={{ color: s.color }}>{s.label}</span>
-                {!c.used_at && !c.blocked && (
+                {!c.blocked && (
                   <button onClick={() => handleBlock(c.code)} className="text-[10px] px-2 py-1 rounded" style={{ border: "1px solid #2A2A38", color: "#D98080" }}>
                     Bloke
                   </button>
@@ -1338,17 +1415,23 @@ function AccessCodesView({ t, lang }) {
 function ZxpRow({ films, lang, t, onOpen, myList, setMyList, unlocked, setUnlocked }) {
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
   const zxpFilms = films.filter((f) => f.genreKey === HIDDEN_GENRE && f.status === "approved");
   if (zxpFilms.length === 0 && !unlocked) return null;
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (pass === ZXP_PASSWORD) {
-      setUnlocked(true);
-      setError("");
-    } else {
-      setError(t.zxp_wrong);
-    }
+    setChecking(true);
+    setError("");
+    supabase.rpc("check_zxp_password", { p_password: pass }).then(({ data, error: rpcError }) => {
+      setChecking(false);
+      if (!rpcError && data === true) {
+        setUnlocked(true);
+        setPass("");
+      } else {
+        setError(t.zxp_wrong);
+      }
+    });
   }
 
   return (
@@ -1365,8 +1448,8 @@ function ZxpRow({ films, lang, t, onOpen, myList, setMyList, unlocked, setUnlock
               className="flex-1 px-3 py-2 rounded-md text-sm outline-none"
               style={{ background: "#1D1D29", border: "1px solid #2A2A38", color: "#ECE8DD" }}
             />
-            <button type="submit" className="px-4 py-2 rounded-md text-sm font-semibold shrink-0" style={{ background: "#C9A15A", color: "#0A0A10" }}>
-              {t.zxp_enter}
+            <button type="submit" disabled={checking} className="px-4 py-2 rounded-md text-sm font-semibold shrink-0 disabled:opacity-50" style={{ background: "#C9A15A", color: "#0A0A10" }}>
+              {checking ? "..." : t.zxp_enter}
             </button>
           </form>
           {error && <p className="text-xs mt-1.5" style={{ color: "#D98080" }}>{error}</p>}
@@ -1408,6 +1491,56 @@ function RenewalBanner({ t }) {
   );
 }
 
+function LegalView({ t, lang }) {
+  const copy = {
+    ht: {
+      title: "Kondisyon Itilizasyon & Politik Konfidansyalite",
+      terms_h: "Kondisyon Itilizasyon",
+      terms_body:
+        "Lè w itilize Citadel Ciné, w dakò pou w pa pataje, kopye, oswa distribye kontni sit la san otorizasyon. Kòd aksè yo pèsonèl — pa pataje yo ak lòt moun. Nou ka bloke nenpòt kont oswa kòd si nou wè yon abi nan itilizasyon sèvis la. Peman yo pa ranbousab apre aksè a fin debloke.",
+      privacy_h: "Politik Konfidansyalite",
+      privacy_body:
+        "Nou kolekte sèlman enfòmasyon ki nesesè pou bay ou aksè: nimewo telefòn ou itilize pou peman an, ak istwa vizyonaj ou (pou fonksyon 'Kontinye Gade'). Nou pa vann done pèsonèl ou bay twazyèm pati. Ou ka mande nou efase done ou nenpòt lè.",
+      contact_h: "Kontak",
+      contact_body: "Pou nenpòt kesyon, kontakte nou sou WhatsApp nan nimewo ki nan paj peman an.",
+    },
+    fr: {
+      title: "Conditions d'Utilisation & Politique de Confidentialité",
+      terms_h: "Conditions d'Utilisation",
+      terms_body:
+        "En utilisant Citadel Ciné, vous acceptez de ne pas partager, copier ou distribuer le contenu du site sans autorisation. Les codes d'accès sont personnels — ne les partagez pas. Nous pouvons bloquer tout compte ou code en cas d'abus. Les paiements ne sont pas remboursables une fois l'accès débloqué.",
+      privacy_h: "Politique de Confidentialité",
+      privacy_body:
+        "Nous collectons uniquement les informations nécessaires pour vous donner accès : le numéro utilisé pour le paiement et votre historique de visionnage (pour 'Continuer à regarder'). Nous ne vendons pas vos données à des tiers. Vous pouvez demander la suppression de vos données à tout moment.",
+      contact_h: "Contact",
+      contact_body: "Pour toute question, contactez-nous sur WhatsApp au numéro indiqué sur la page de paiement.",
+    },
+    en: {
+      title: "Terms of Use & Privacy Policy",
+      terms_h: "Terms of Use",
+      terms_body:
+        "By using Citadel Ciné, you agree not to share, copy, or distribute the site's content without authorization. Access codes are personal — do not share them. We may block any account or code found to be abused. Payments are non-refundable once access is unlocked.",
+      privacy_h: "Privacy Policy",
+      privacy_body:
+        "We only collect the information needed to give you access: the number used for payment, and your viewing history (for 'Continue Watching'). We do not sell your personal data to third parties. You can request deletion of your data at any time.",
+      contact_h: "Contact",
+      contact_body: "For any questions, contact us on WhatsApp at the number shown on the payment page.",
+    },
+  }[lang];
+
+  return (
+    <div className="max-w-2xl mx-auto px-5 py-10">
+      <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{copy.title}</h2>
+      <h3 className="mt-6 text-sm font-semibold" style={{ color: "#C9A15A" }}>{copy.terms_h}</h3>
+      <p className="mt-2 text-sm leading-relaxed" style={{ color: "#B8B5C0" }}>{copy.terms_body}</p>
+      <h3 className="mt-6 text-sm font-semibold" style={{ color: "#C9A15A" }}>{copy.privacy_h}</h3>
+      <p className="mt-2 text-sm leading-relaxed" style={{ color: "#B8B5C0" }}>{copy.privacy_body}</p>
+      <h3 className="mt-6 text-sm font-semibold" style={{ color: "#C9A15A" }}>{copy.contact_h}</h3>
+      <p className="mt-2 text-sm leading-relaxed" style={{ color: "#B8B5C0" }}>{copy.contact_body}</p>
+    </div>
+  );
+}
+
 export default function HyperFilms() {
   const [view, setView] = useState("catalog");
   const [lang, setLang] = useState("fr");
@@ -1423,6 +1556,7 @@ export default function HyperFilms() {
   const [uploadQueue, setUploadQueue] = useState([]); // {id, label, progress, statusText: 'uploading'|'done'|'error', error}
   const [siteStats, setSiteStats] = useState({ total_views: 0, unique_visitors: 0 });
   const [zxpUnlocked, setZxpUnlocked] = useState(false);
+  const [heroIndex, setHeroIndex] = useState(0);
 
   useEffect(() => {
     setMyList(getLocalList("hf_my_list"));
@@ -1446,6 +1580,12 @@ export default function HyperFilms() {
       localStorage.setItem("hf_visited", "1");
       supabase.rpc("increment_unique_visitor");
     }
+
+    // Inisyalize OneSignal (notifikasyon push) — mande script la deja nan index.html
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    window.OneSignalDeferred.push(async function (OneSignal) {
+      await OneSignal.init({ appId: ONESIGNAL_APP_ID });
+    });
   }, []);
 
   // Rafrechi done yo chak fwa staff louvri Estatistik oswa Jere Fim, pou nimewo yo toujou aktyèl
@@ -1560,6 +1700,13 @@ export default function HyperFilms() {
 
         if (insertResult && insertResult.ok === false) throw new Error(insertResult.error);
 
+        // Si se staff ki telechaje l dirèkteman (deja "approved"), voye notifikasyon an tou
+        // (yon sèl fwa pa seri, pa yon fwa pou chak episòd)
+        if (isStaff && i === 0) {
+          const notifyTitle = isSerie ? formSnapshot.seriesTitle || formSnapshot.title : formSnapshot.title;
+          supabase.functions.invoke("send-new-film-notification", { body: { title: notifyTitle } }).catch(() => {});
+        }
+
         updateQueueItem(queueId, { statusText: "done", progress: 100 });
         setTimeout(() => setUploadQueue((prev) => prev.filter((q) => q.id !== queueId)), 5000);
       } catch (err) {
@@ -1569,8 +1716,13 @@ export default function HyperFilms() {
   }
 
   async function handleApprove(id) {
+    const film = films.find((f) => f.id === id);
     const { error } = await supabase.from("films").update({ status: "approved" }).eq("id", id);
-    if (!error) setFilms((prev) => prev.map((f) => (f.id === id ? { ...f, status: "approved" } : f)));
+    if (!error) {
+      setFilms((prev) => prev.map((f) => (f.id === id ? { ...f, status: "approved" } : f)));
+      // Voye yon notifikasyon push bay tout moun ki abòne, san mete kle sekrè a nan App.jsx
+      supabase.functions.invoke("send-new-film-notification", { body: { title: film?.title || "" } }).catch(() => {});
+    }
   }
 
   async function handleUpdatePoster(filmId, file) {
@@ -1639,7 +1791,24 @@ export default function HyperFilms() {
     return result;
   }, [approvedFilms]);
 
-  const featured = catalogFilms.find((f) => f.featured) || catalogFilms[0];
+  const heroPool = useMemo(() => {
+    const top5 = [...approvedFilms].sort((a, b) => b.viewCount - a.viewCount).slice(0, 5);
+    return top5.length > 0 ? top5 : catalogFilms.slice(0, 5);
+  }, [approvedFilms, catalogFilms]);
+
+  useEffect(() => {
+    if (heroPool.length <= 1) return;
+    const id = setInterval(() => {
+      setHeroIndex((i) => (i + 1) % heroPool.length);
+    }, 5000);
+    return () => clearInterval(id);
+  }, [heroPool.length]);
+
+  useEffect(() => {
+    if (heroIndex >= heroPool.length) setHeroIndex(0);
+  }, [heroPool.length, heroIndex]);
+
+  const featured = heroPool[heroIndex] || catalogFilms.find((f) => f.featured) || catalogFilms[0];
 
   const continueWatching = useMemo(() => {
     const ids = getLocalList("hf_recent");
@@ -1757,124 +1926,4 @@ export default function HyperFilms() {
                     <button onClick={() => { setView("manage"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.manage_films}</button>
                     <button onClick={() => { setView("stats"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.stats_title}</button>
                     <button onClick={() => { setView("codes"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.access_codes_menu}</button>
-                    <button onClick={() => { setView("settings"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.nav_settings}</button>
-                    <button onClick={handleLogout} className="flex items-center gap-1.5 w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#8C8A96" }}><LogOut size={13} /> Logout</button>
-                  </>
-                ) : (
-                  <button onClick={() => { setView("upload"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.login_staff}</button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {searchOpen && (
-        <div className="sm:hidden flex items-center gap-2 px-5 py-2.5" style={{ background: "#0A0A10", borderBottom: "1px solid #2A2A38" }}>
-          <div className="flex items-center flex-1 px-3 py-2 rounded-full" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
-            <Search size={14} style={{ color: "#C9A15A" }} />
-            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.search_ph}
-              className="bg-transparent outline-none ml-2 text-sm w-full" style={{ color: "#ECE8DD" }} />
-          </div>
-          <button onClick={() => { setSearchOpen(false); setQuery(""); }} style={{ color: "#8C8A96" }}><X size={18} /></button>
-        </div>
-      )}
-
-      {(view === "catalog") && <GenreNav t={t} onSelect={scrollToGenre} />}
-
-      {view === "upload" ? (
-        staffUser ? <UploadForm lang={lang} t={t} isStaff={true} onQueueUpload={queueUpload} existingSeries={existingSeries} /> : <LoginGate lang={lang} onLoggedIn={setStaffUser} />
-      ) : view === "community" ? (
-        <UploadForm lang={lang} t={t} isStaff={false} onQueueUpload={queueUpload} existingSeries={existingSeries} />
-      ) : view === "settings" && staffUser ? (
-        <SettingsView t={t} settings={settings} onSave={handleSaveSettings} />
-      ) : view === "pending" && staffUser ? (
-        <PendingView t={t} lang={lang} films={films} onApprove={handleApprove} />
-      ) : view === "manage" && staffUser ? (
-        <ManageFilmsView t={t} lang={lang} films={films} onUpdatePoster={handleUpdatePoster} />
-      ) : view === "stats" && staffUser ? (
-        <StatsView t={t} lang={lang} films={films} siteStats={siteStats} onRefresh={() => {
-          supabase.from("films").select("*").order("created_at", { ascending: false }).then(({ data, error }) => {
-            if (!error && data) setFilms(data.map(dbRowToFilm));
-          });
-          supabase.from("site_stats").select("*").eq("id", 1).single().then(({ data }) => {
-            if (data) setSiteStats(data);
-          });
-        }} />
-      ) : view === "codes" && staffUser ? (
-        <AccessCodesView t={t} lang={lang} />
-      ) : view === "mylist" ? (
-        <div className="px-5 sm:px-10 py-10">
-          <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.my_list}</h2>
-          <div className="flex flex-wrap gap-4 mt-5">
-            {myListFilms.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
-            {myListFilms.length === 0 && <p className="text-sm" style={{ color: "#8C8A96" }}>{t.empty}</p>}
-          </div>
-        </div>
-      ) : view === "offline" ? (
-        <div className="px-5 sm:px-10 py-10">
-          <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.nav_offline}</h2>
-          <div className="flex flex-wrap gap-4 mt-5">
-            {offlineFilms.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
-            {offlineFilms.length === 0 && <p className="text-sm" style={{ color: "#8C8A96" }}>{t.no_offline}</p>}
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Hero */}
-          {featured && (
-            <div className="relative flex items-end px-6 sm:px-10 py-16 sm:py-28"
-              style={{
-                background: settings.background_url
-                  ? `linear-gradient(to top, #0A0A10 5%, rgba(10,10,16,0.5) 60%, rgba(10,10,16,0.2)), url(${settings.background_url}) center/cover`
-                  : featured.posterUrl
-                  ? `linear-gradient(to top, #0A0A10 5%, rgba(10,10,16,0.5) 60%, rgba(10,10,16,0.2)), url(${featured.posterUrl}) center/cover`
-                  : `linear-gradient(120deg, ${featured.color}, #0A0A10 75%)`,
-                borderBottom: "1px solid #2A2A38",
-              }}>
-              <div className="max-w-lg">
-                <span className="text-[11px] tracking-widest uppercase" style={{ color: "#C9A15A" }}>{t.featured}</span>
-                <h1 className="mt-2" style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "clamp(1.8rem, 5vw, 3rem)", lineHeight: 1.05 }}>
-                  {featured.title[lang].toUpperCase()}
-                </h1>
-                <p className="mt-3 text-sm leading-relaxed max-w-md" style={{ color: "#B8B5C0", fontFamily: "'Work Sans', sans-serif" }}>{featured.desc[lang]}</p>
-                <div className="flex gap-2 mt-5">
-                  <button onClick={() => setOpenFilm(featured)} className="flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold" style={{ background: "#C9A15A", color: "#0A0A10" }}>
-                    <Play size={15} fill="#0A0A10" /> {t.watch}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {searchResults ? (
-            <div className="px-5 sm:px-10 py-6 flex flex-wrap gap-4">
-              {searchResults.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
-              {searchResults.length === 0 && <p className="text-sm py-10" style={{ color: "#8C8A96" }}>{t.empty}</p>}
-            </div>
-          ) : (
-            <div className="py-4 pb-16">
-              <ComingSoonRow films={approvedAll} lang={lang} t={t} />
-              <SimpleRow title={t.continue_watching} list={continueWatching} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
-              <SimpleRow title={t.top10} list={top10} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
-              {GENRE_KEYS.map((g) =>
-                g === HIDDEN_GENRE ? (
-                  <ZxpRow key={g} films={catalogFilms} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} unlocked={zxpUnlocked} setUnlocked={setZxpUnlocked} />
-                ) : (
-                  <Row key={g} genreKey={g} films={catalogFilms} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
-                )
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      <DetailModal film={openFilm} lang={lang} t={t} onClose={() => setOpenFilm(null)} allFilms={films} myList={myList} setMyList={setMyList} onOpen={setOpenFilm} />
-
-      {uploadQueue.length > 0 && (
-        <div className="fixed bottom-3 right-3 left-3 sm:left-auto sm:w-80 z-50 space-y-2">
-          {uploadQueue.map((q) => (
-            <div key={q.id} className="rounded-md p-3 shadow-lg" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs truncate pr-2" style={{ color: "#ECE8DD", fontWeight: 600 }}>{q.label}</p>
-                {q.statusText === "done" && <Check size={14} style={{ color: "#7BB88A"
+                    <button onClick={() => { setView("settings"); setStaffOpen(fa
