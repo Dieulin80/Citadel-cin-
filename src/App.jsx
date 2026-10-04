@@ -510,25 +510,6 @@ function PaywallForm({ t, lang, onUnlocked }) {
   const [loading, setLoading] = useState(false);
   const [cardLoading, setCardLoading] = useState(false);
 
-  // Si moun nan fèk retounen soti Stripe (apre peman kat), konfime l epi debloke otomatikman
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sessionId = params.get("stripe_session_id");
-    if (!sessionId) return;
-    setCardLoading(true);
-    supabase.functions.invoke("verify-checkout-session", { body: { session_id: sessionId } }).then(({ data }) => {
-      setCardLoading(false);
-      window.history.replaceState({}, "", window.location.pathname);
-      if (data && data.ok) {
-        setAccessExpiry(data.expires_at);
-        setAccessCode(data.code);
-        onUnlocked(new Date(data.expires_at));
-      } else {
-        setError(t.code_invalid);
-      }
-    });
-  }, []);
-
   async function handleCardPay() {
     setCardLoading(true);
     setError("");
@@ -808,7 +789,7 @@ function DetailModal({ film, lang, t, onClose, allFilms, myList, setMyList, onOp
   const similar = isSeries ? [] : (allFilms || []).filter((f) => f.genreKey === film.genreKey && f.id !== film.id && f.status === "approved" && !isUpcoming(f)).slice(0, 6);
 
   return (
-    <div ref={modalScrollRef} className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto" style={{ background: "rgba(6,6,10,0.85)" }} onClick={() => { onClose(); setPlaying(false); }}>
+    <div ref={modalScrollRef} className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 overflow-y-auto" style={{ background: "rgba(6,6,10,0.85)" }} onClick={() => { onClose(); setPlaying(false); }}>
       <div className="w-full max-w-lg rounded-lg overflow-hidden my-8" style={{ background: "#15151F", border: "1px solid #2A2A38" }} onClick={(e) => e.stopPropagation()}>
         {showPaywall ? (
           <div style={{ background: "#0A0A10" }}>
@@ -1613,9 +1594,28 @@ export default function HyperFilms() {
   const [siteStats, setSiteStats] = useState({ total_views: 0, unique_visitors: 0 });
   const [zxpUnlocked, setZxpUnlocked] = useState(false);
   const [heroIndex, setHeroIndex] = useState(0);
+  const [stripeBanner, setStripeBanner] = useState(null);
 
   useEffect(() => {
     setMyList(getLocalList("hf_my_list"));
+  }, []);
+
+  // Si moun nan fèk retounen soti Stripe (apre peman kat), konfime l epi debloke otomatikman.
+  // Mete isit la (nivo App a) pou l toujou kouri lè sit la louvri, menm si paj modal fim nan fèmen.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("stripe_session_id");
+    if (!sessionId) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    supabase.functions.invoke("verify-checkout-session", { body: { session_id: sessionId } }).then(({ data }) => {
+      if (data && data.ok) {
+        setAccessExpiry(data.expires_at);
+        setAccessCode(data.code);
+        setStripeBanner({ ok: true });
+      } else {
+        setStripeBanner({ ok: false });
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -1906,6 +1906,24 @@ export default function HyperFilms() {
 
       <RenewalBanner t={t} />
 
+      {stripeBanner && (
+        <div
+          className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 rounded-md text-sm font-semibold max-w-xs text-center shadow-lg"
+          style={
+            stripeBanner.ok
+              ? { background: "#3FAE6B", color: "#0A0A10" }
+              : { background: "#D98080", color: "#0A0A10" }
+          }
+        >
+          {stripeBanner.ok
+            ? lang === "en" ? "Payment confirmed — access unlocked!" : lang === "fr" ? "Paiement confirmé — accès débloqué !" : "Peman konfime — aksè debloke!"
+            : lang === "en" ? "Payment could not be confirmed. Please contact us." : lang === "fr" ? "Paiement non confirmé. Contactez-nous." : "Peman an pa konfime. Kontakte nou."}
+          <button onClick={() => setStripeBanner(null)} className="block mx-auto mt-1 text-[10px] underline opacity-70">
+            {lang === "en" ? "Dismiss" : lang === "fr" ? "Fermer" : "Fèmen"}
+          </button>
+        </div>
+      )}
+
       {/* Ticker */}
       <Ticker />
 
@@ -1936,188 +1954,7 @@ export default function HyperFilms() {
         </button>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <button onClick={() => setView("offline")} className="hidden sm:flex px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
+          <button onClick={() => setView("offline")} className="flex px-2.5 sm:px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
             style={{ color: view === "offline" ? "#0A0A10" : "#ECE8DD", background: view === "offline" ? "#C9A15A" : "transparent" }}>
-            ⬇ {t.nav_offline}
-          </button>
-
-          <button onClick={() => setView("mylist")} className="flex px-2.5 sm:px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
-            style={{ color: view === "mylist" ? "#0A0A10" : "#ECE8DD", background: view === "mylist" ? "#C9A15A" : "transparent" }}>
-            ✓ <span className="hidden sm:inline">{t.my_list}</span>
-          </button>
-
-          <button onClick={() => setView("community")} className="hidden sm:flex px-3 py-1.5 rounded-md text-sm items-center gap-1.5"
-            style={{ color: view === "community" ? "#0A0A10" : "#ECE8DD", background: view === "community" ? "#C9A15A" : "transparent" }}>
-            <UploadCloud size={14} /> {t.nav_community}
-          </button>
-
-          <WhatsAppButton t={t} />
-
-          <div className="relative">
-            <button onClick={() => setLangOpen((o) => !o)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm" style={{ color: "#ECE8DD", border: "1px solid #2A2A38" }}>
-              <Globe size={14} style={{ color: "#C9A15A" }} />
-              <span className="hidden sm:inline">{LANGS.find((l) => l.code === lang).label}</span>
-            </button>
-            {langOpen && (
-              <div className="absolute right-0 mt-1 rounded-md overflow-hidden z-50" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
-                {LANGS.map((l) => (
-                  <button key={l.code} onClick={() => { setLang(l.code); setLangOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: l.code === lang ? "#C9A15A" : "#ECE8DD" }}>
-                    {l.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="relative">
-            <button onClick={() => setStaffOpen((o) => !o)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm" style={{ color: "#ECE8DD", border: "1px solid #2A2A38" }}>
-              <ShieldCheck size={14} style={{ color: "#C9A15A" }} />
-            </button>
-            {staffOpen && (
-              <div className="absolute right-0 mt-1 rounded-md overflow-hidden z-50" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
-                {staffUser ? (
-                  <>
-                    <button onClick={() => { setView("upload"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.nav_staff}: {t.submit}</button>
-                    <button onClick={() => { setView("pending"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.pending_title}</button>
-                    <button onClick={() => { setView("manage"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.manage_films}</button>
-                    <button onClick={() => { setView("stats"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.stats_title}</button>
-                    <button onClick={() => { setView("codes"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.access_codes_menu}</button>
-                    <button onClick={() => { setView("settings"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.nav_settings}</button>
-                    <button onClick={handleLogout} className="flex items-center gap-1.5 w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#8C8A96" }}><LogOut size={13} /> Logout</button>
-                  </>
-                ) : (
-                  <button onClick={() => { setView("upload"); setStaffOpen(false); }} className="block w-full text-left px-3.5 py-2 text-sm whitespace-nowrap" style={{ color: "#ECE8DD" }}>{t.login_staff}</button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {searchOpen && (
-        <div className="sm:hidden flex items-center gap-2 px-5 py-2.5" style={{ background: "#0A0A10", borderBottom: "1px solid #2A2A38" }}>
-          <div className="flex items-center flex-1 px-3 py-2 rounded-full" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
-            <Search size={14} style={{ color: "#C9A15A" }} />
-            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.search_ph}
-              className="bg-transparent outline-none ml-2 text-sm w-full" style={{ color: "#ECE8DD" }} />
-          </div>
-          <button onClick={() => { setSearchOpen(false); setQuery(""); }} style={{ color: "#8C8A96" }}><X size={18} /></button>
-        </div>
-      )}
-
-      {(view === "catalog") && <GenreNav t={t} onSelect={scrollToGenre} />}
-
-      {view === "upload" ? (
-        staffUser ? <UploadForm lang={lang} t={t} isStaff={true} onQueueUpload={queueUpload} existingSeries={existingSeries} /> : <LoginGate lang={lang} onLoggedIn={setStaffUser} />
-      ) : view === "community" ? (
-        <UploadForm lang={lang} t={t} isStaff={false} onQueueUpload={queueUpload} existingSeries={existingSeries} />
-      ) : view === "settings" && staffUser ? (
-        <SettingsView t={t} settings={settings} onSave={handleSaveSettings} />
-      ) : view === "pending" && staffUser ? (
-        <PendingView t={t} lang={lang} films={films} onApprove={handleApprove} />
-      ) : view === "manage" && staffUser ? (
-        <ManageFilmsView t={t} lang={lang} films={films} onUpdatePoster={handleUpdatePoster} />
-      ) : view === "stats" && staffUser ? (
-        <StatsView t={t} lang={lang} films={films} siteStats={siteStats} onRefresh={() => {
-          supabase.from("films").select("*").order("created_at", { ascending: false }).then(({ data, error }) => {
-            if (!error && data) setFilms(data.map(dbRowToFilm));
-          });
-          supabase.from("site_stats").select("*").eq("id", 1).single().then(({ data }) => {
-            if (data) setSiteStats(data);
-          });
-        }} />
-      ) : view === "codes" && staffUser ? (
-        <AccessCodesView t={t} lang={lang} />
-      ) : view === "mylist" ? (
-        <div className="px-5 sm:px-10 py-10">
-          <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.my_list}</h2>
-          <div className="flex flex-wrap gap-4 mt-5">
-            {myListFilms.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
-            {myListFilms.length === 0 && <p className="text-sm" style={{ color: "#8C8A96" }}>{t.empty}</p>}
-          </div>
-        </div>
-      ) : view === "offline" ? (
-        <div className="px-5 sm:px-10 py-10">
-          <h2 style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "1.5rem", letterSpacing: "0.02em" }}>{t.nav_offline}</h2>
-          <div className="flex flex-wrap gap-4 mt-5">
-            {offlineFilms.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
-            {offlineFilms.length === 0 && <p className="text-sm" style={{ color: "#8C8A96" }}>{t.no_offline}</p>}
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Hero */}
-          {featured && (
-            <div className="relative flex items-end px-6 sm:px-10 py-16 sm:py-28"
-              style={{
-                background: settings.background_url
-                  ? `linear-gradient(to top, #0A0A10 5%, rgba(10,10,16,0.5) 60%, rgba(10,10,16,0.2)), url(${settings.background_url}) center/cover`
-                  : featured.posterUrl
-                  ? `linear-gradient(to top, #0A0A10 5%, rgba(10,10,16,0.5) 60%, rgba(10,10,16,0.2)), url(${featured.posterUrl}) center/cover`
-                  : `linear-gradient(120deg, ${featured.color}, #0A0A10 75%)`,
-                borderBottom: "1px solid #2A2A38",
-              }}>
-              <div className="max-w-lg">
-                <span className="text-[11px] tracking-widest uppercase" style={{ color: "#C9A15A" }}>{t.featured}</span>
-                <h1 className="mt-2" style={{ fontFamily: "'Anton', sans-serif", color: "#ECE8DD", fontSize: "clamp(1.8rem, 5vw, 3rem)", lineHeight: 1.05 }}>
-                  {featured.title[lang].toUpperCase()}
-                </h1>
-                <p className="mt-3 text-sm leading-relaxed max-w-md" style={{ color: "#B8B5C0", fontFamily: "'Work Sans', sans-serif" }}>{featured.desc[lang]}</p>
-                <div className="flex gap-2 mt-5">
-                  <button onClick={() => setOpenFilm(featured)} className="flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold" style={{ background: "#C9A15A", color: "#0A0A10" }}>
-                    <Play size={15} fill="#0A0A10" /> {t.watch}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {searchResults ? (
-            <div className="px-5 sm:px-10 py-6 flex flex-wrap gap-4">
-              {searchResults.map((f) => <FilmCard key={f.id} film={f} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />)}
-              {searchResults.length === 0 && <p className="text-sm py-10" style={{ color: "#8C8A96" }}>{t.empty}</p>}
-            </div>
-          ) : (
-            <div className="py-4 pb-16">
-              <ComingSoonRow films={approvedAll} lang={lang} t={t} />
-              <SimpleRow title={t.continue_watching} list={continueWatching} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
-              <SimpleRow title={t.top10} list={top10} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
-              {GENRE_KEYS.map((g) =>
-                g === HIDDEN_GENRE ? (
-                  <ZxpRow key={g} films={catalogFilms} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} unlocked={zxpUnlocked} setUnlocked={setZxpUnlocked} />
-                ) : (
-                  <Row key={g} genreKey={g} films={catalogFilms} lang={lang} t={t} onOpen={setOpenFilm} myList={myList} setMyList={setMyList} />
-                )
-              )}
-            </div>
-          )}
-        </>
-      )}
-
-      <DetailModal film={openFilm} lang={lang} t={t} onClose={() => setOpenFilm(null)} allFilms={films} myList={myList} setMyList={setMyList} onOpen={setOpenFilm} />
-
-      {uploadQueue.length > 0 && (
-        <div className="fixed bottom-3 right-3 left-3 sm:left-auto sm:w-80 z-50 space-y-2">
-          {uploadQueue.map((q) => (
-            <div key={q.id} className="rounded-md p-3 shadow-lg" style={{ background: "#15151F", border: "1px solid #2A2A38" }}>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs truncate pr-2" style={{ color: "#ECE8DD", fontWeight: 600 }}>{q.label}</p>
-                {q.statusText === "done" && <Check size={14} style={{ color: "#7BB88A" }} />}
-              </div>
-              {q.statusText === "error" ? (
-                <p className="text-[11px]" style={{ color: "#D98080" }}>{q.error}</p>
-              ) : (
-                <>
-                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "#1D1D29" }}>
-                    <div className="h-full rounded-full transition-all" style={{ width: `${q.progress}%`, background: q.statusText === "done" ? "#7BB88A" : "#C9A15A" }} />
-                  </div>
-                  <p className="text-[10px] mt-1" style={{ color: "#8C8A96" }}>{q.statusText === "done" ? "Fini!" : `${q.progress}%`}</p>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+            ⬇ <span className="hidden sm:inline">{t.nav_offline}</span>
+  
